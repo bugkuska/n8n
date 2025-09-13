@@ -7,11 +7,14 @@
 #include <DHT.h>
 
 // ===== DHT Sensor (เปลี่ยนพิน/ประเภทได้ตามการต่อจริง) =====
-#define DHTPIN 4      // ขา DATA ของ DHT ต่อที่ GPIO4 (ปรับได้)
-#define DHTTYPE DHT11 // ถ้าใช้ DHT22 ให้เปลี่ยนเป็น DHT22
+#define DHTPIN 18      // ขา DATA ของ DHT ต่อที่ GPIO18 (ปรับได้)
+#define DHTTYPE DHT11  // ถ้าใช้ DHT22 ให้เปลี่ยนเป็น DHT22
 
 // ===== (ทางเลือก) ปุ่มเรียก Config Portal เมื่อกดค้างตอนบูต =====
-#define CONFIG_PIN 0  // ปุ่ม BOOT ของ ESP32 ส่วนใหญ่คือ GPIO0
+#define CONFIG_PIN 0   // ปุ่ม BOOT ของ ESP32 ส่วนใหญ่คือ GPIO0
+
+// ===== LED แสดงสถานะ MQTT =====
+#define LED_PIN 2      // LED ออนบอร์ดหลายรุ่นอยู่ที่ GPIO2
 
 // ================== Globals ==================
 WiFiClient espClient;
@@ -21,12 +24,12 @@ Preferences prefs;        // เก็บ config
 DHT dht(DHTPIN, DHTTYPE); // อินสแตนซ์ DHT
 
 // คีย์ใน NVS
-const char* NVS_NS        = "settings";
-const char* KEY_MQTT_HOST = "mqtt_host";
-const char* KEY_MQTT_PORT = "mqtt_port";
-const char* KEY_MQTT_USER = "mqtt_user";
-const char* KEY_MQTT_PASS = "mqtt_pass";
-const char* KEY_MQTT_TOPIC= "mqtt_topic";
+const char* NVS_NS         = "settings";
+const char* KEY_MQTT_HOST  = "mqtt_host";
+const char* KEY_MQTT_PORT  = "mqtt_port";
+const char* KEY_MQTT_USER  = "mqtt_user";
+const char* KEY_MQTT_PASS  = "mqtt_pass";
+const char* KEY_MQTT_TOPIC = "mqtt_topic";
 
 // บัฟเฟอร์ค่า MQTT (สำหรับฟอร์ม WiFiManager)
 char buf_mqtt_host[64] = "";
@@ -42,12 +45,22 @@ void saveConfigToNVS();
 void connectMQTT();
 void readDHT_and_publish();
 
+// อัปเดตสถานะ LED: ติดเมื่อ mqtt.connected() == true
+void updateLed() {
+  digitalWrite(LED_PIN, (mqtt.connected() ? HIGH : LOW));
+}
+
 // ================== SETUP ==================
 void setup() {
   Serial.begin(9600);
   delay(100);
 
   pinMode(CONFIG_PIN, INPUT_PULLUP);
+
+  // LED เริ่มต้นดับไว้ก่อน
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
   dht.begin();
 
   // โหลดค่าจาก NVS (ถ้ามี)
@@ -88,6 +101,10 @@ void loop() {
     connectMQTT();
   }
   mqtt.loop();
+
+  // อัปเดตสถานะ LED ตามการเชื่อมต่อ MQTT
+  updateLed();
+
   timer.run();
 }
 
@@ -150,11 +167,11 @@ void startConfigPortalIfNeeded(bool force) {
 
 void loadConfigFromNVS() {
   prefs.begin(NVS_NS, true);  // read-only
-  String host = prefs.getString(KEY_MQTT_HOST, "");
-  String port = prefs.getString(KEY_MQTT_PORT, "1883");
-  String user = prefs.getString(KEY_MQTT_USER, "");
-  String pass = prefs.getString(KEY_MQTT_PASS, "");
-  String topic= prefs.getString(KEY_MQTT_TOPIC, "dht11sensor");
+  String host  = prefs.getString(KEY_MQTT_HOST, "");
+  String port  = prefs.getString(KEY_MQTT_PORT, "1883");
+  String user  = prefs.getString(KEY_MQTT_USER, "");
+  String pass  = prefs.getString(KEY_MQTT_PASS, "");
+  String topic = prefs.getString(KEY_MQTT_TOPIC, "dht11sensor");
   prefs.end();
 
   strncpy(buf_mqtt_host, host.c_str(), sizeof(buf_mqtt_host));
@@ -221,12 +238,18 @@ void connectMQTT() {
       // Birth message: แจ้งว่า online (retain = true)
       mqtt.publish(availTopic, "online", true);
 
+      // ✅ ติด LED เมื่อเชื่อมต่อสำเร็จ
+      digitalWrite(LED_PIN, HIGH);
+
       // (ถ้าต้องการ) subscribe topic ควบคุม/สั่งงานที่นี่
       // mqtt.subscribe("dht11sensor/cmd");
     } else {
       Serial.print("failed, rc=");
       Serial.print(mqtt.state());
       Serial.println(" retry in 3s");
+
+      // ✅ ดับ LED เมื่อยังต่อไม่ได้ / จะ retry
+      digitalWrite(LED_PIN, LOW);
       delay(3000);
     }
   }
@@ -261,4 +284,7 @@ void readDHT_and_publish() {
              h, t, hic);
     mqtt.publish(buf_mqtt_topic, payload, true);
   }
+
+  // อัปเดต LED (กันกรณีสถานะเปลี่ยนระหว่างรอบ)
+  updateLed();
 }
