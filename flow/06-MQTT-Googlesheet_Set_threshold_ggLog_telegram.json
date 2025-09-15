@@ -1,0 +1,424 @@
+{
+  "name": "06-MQTT-Googlesheet_Set_threshold_ggLog_telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "chatId": "=7629158584",
+        "text": "={{$json.text}}",
+        "additionalFields": {}
+      },
+      "id": "79bf217f-4e70-4cbc-9523-5a2272f75cf1",
+      "name": "Telegram Alert/Summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        336,
+        320
+      ],
+      "webhookId": "feb0f736-03df-4037-8690-6ac3d57b0499",
+      "credentials": {
+        "telegramApi": {
+          "id": "6bAn6ALKs7QaTtxz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e864e34c-5ba8-4a44-a86c-79e54b8b6dab",
+              "leftValue": "={{$json.shouldNotify}}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "33c1bc69-f2ad-4e3f-86fc-15f220407908",
+      "name": "shouldNotify=true",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "14MZtmFDTAw4RFoIFODQ7K-7uQ-yR09OdS0eZduCmOEM",
+          "mode": "list",
+          "cachedResultName": "n8ndht_logger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/14MZtmFDTAw4RFoIFODQ7K-7uQ-yR09OdS0eZduCmOEM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "dht",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/14MZtmFDTAw4RFoIFODQ7K-7uQ-yR09OdS0eZduCmOEM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "baseTopic": "={{ $json.baseTopic }}",
+            "value_source": "={{ $json.value_source }}",
+            "status_detail": "={{ $json.status_detail }}",
+            "isHigh": "={{ $json.isHigh }}",
+            "mode": "={{ $json.mode }}",
+            "threshold_temp": "={{ $json.threshold_temp }}",
+            "hunit": "={{ $json.hunit }}",
+            "hum": "={{ $json.hum }}",
+            "tunit": "={{ $json.tunit }}",
+            "temp": "={{ $json.temp }}",
+            "site": "={{ $json.site }}",
+            "ts": "={{ $json.ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "site",
+              "displayName": "site",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "temp",
+              "displayName": "temp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tunit",
+              "displayName": "tunit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hum",
+              "displayName": "hum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hunit",
+              "displayName": "hunit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "threshold_temp",
+              "displayName": "threshold_temp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "isHigh",
+              "displayName": "isHigh",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status_detail",
+              "displayName": "status_detail",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "baseTopic",
+              "displayName": "baseTopic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "value_source",
+              "displayName": "value_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        368,
+        96
+      ],
+      "id": "2e7a2fe5-89cf-4316-8570-62db9a62d42d",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "x2ZvQa9SaLcszstn",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "topics": "dht11sensor",
+        "options": {
+          "jsonParseBody": true
+        }
+      },
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [
+        -736,
+        128
+      ],
+      "id": "ddca6b1e-45da-42d9-9786-5656665d342e",
+      "name": "MQTT Trigger",
+      "credentials": {
+        "mqtt": {
+          "id": "T0dygmT25108Qws6",
+          "name": "MQTT account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e864e34c-5ba8-4a44-a86c-79e54b8b6dab",
+              "leftValue": "={{$json.shouldLog}}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "029bb7ee-3ce1-4f39-9fed-5cc5b617edb3",
+      "name": "shouldLog=true",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        64,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gate: 1m (high) / 60m (normal) — DHT only + Telegram flags\nconst HIGH_EVERY_MIN    = Number($env.HIGH_EVERY_MIN ?? 1);    // high: ทุก X นาที\nconst NORMAL_EVERY_MIN  = Number($env.NORMAL_EVERY_MIN ?? 60); // normal: ทุก X นาที\n\nconst item  = { ...$json };\nconst nowMs = Date.now();\n\nconst siteName  = item.site || 'default';\nconst baseTopic = item.baseTopic || 'DHTsensor';\nconst sensorKey = `${siteName}::${baseTopic}`;\n\nconst g = getWorkflowStaticData('global');\n\n// --- state ---\ng._gate      = g._gate      || {};\ng._lastValid = g._lastValid || {};\ng._gate[sensorKey] = g._gate[sensorKey] || { lastMode: 'normal', lastHighAt: 0, lastNormalAt: 0 };\ng._lastValid[sensorKey] = g._lastValid[sensorKey] || { temp: null, hum: null };\n\n// --- helpers ---\nconst hasNum = v => Number.isFinite(Number(v));\nconst pick   = (cur, last) => (hasNum(cur) ? Number(cur) : (hasNum(last) ? last : null));\nconst f1     = v => (hasNum(v) ? Number(v).toFixed(1) : '—');\n\n// --- last valid ---\nif (hasNum(item.temp)) g._lastValid[sensorKey].temp = Number(item.temp);\nif (hasNum(item.hum))  g._lastValid[sensorKey].hum  = Number(item.hum);\n\n// --- fallback ---\nitem.temp = pick(item.temp, g._lastValid[sensorKey].temp);\nitem.hum  = pick(item.hum,  g._lastValid[sensorKey].hum);\nitem.value_source = (hasNum($json.temp) || hasNum($json.hum)) ? 'current' : 'last';\n\n// --- threshold & mode ---\nconst thresholdTemp = hasNum(item.threshold_temp)\n  ? Number(item.threshold_temp)\n  : (hasNum($env.TEMP_THRESHOLD) ? Number($env.TEMP_THRESHOLD) : 35);\n\nlet modeNow = (item.mode === 'high' || item.mode === 'normal') ? item.mode : 'normal';\nif (hasNum(item.temp)) modeNow = (Number(item.temp) > thresholdTemp) ? 'high' : 'normal';\n\nconst prevMode = g._gate[sensorKey].lastMode;\n\n// --- decide frequency (log & notify) ---\nlet shouldLog = false;\nlet shouldNotify = false;\nlet status_detail = 'normal_periodic';\n\nif (modeNow === 'high') {\n  const due = nowMs >= g._gate[sensorKey].lastHighAt + HIGH_EVERY_MIN * 60 * 1000;\n  if (due) {\n    shouldLog = true;\n    shouldNotify = true;\n    g._gate[sensorKey].lastHighAt = nowMs;\n  }\n  status_detail = 'high';\n} else {\n  if (prevMode === 'high') {\n    // recovery: แจ้ง & บันทึกทันที 1 ครั้ง\n    shouldLog = true;\n    shouldNotify = true;\n    status_detail = 'recovery';\n    g._gate[sensorKey].lastNormalAt = nowMs;\n  } else {\n    const due = nowMs >= g._gate[sensorKey].lastNormalAt + NORMAL_EVERY_MIN * 60 * 1000;\n    if (due) {\n      shouldLog = true;\n      shouldNotify = true;\n      g._gate[sensorKey].lastNormalAt = nowMs;\n    }\n    status_detail = 'normal_periodic';\n  }\n}\ng._gate[sensorKey].lastMode = modeNow;\n\n// --- build Telegram text (plain text) ---\nconst statusCategory =\n  status_detail === 'high'     ? 'high' :\n  status_detail === 'recovery' ? 'recovery' : 'normal';\n\nconst ICONS = { high: '🔥', recovery: '🟢', normal: '✅' };\nconst STATUS_TEXT = { high: 'สูงเกินเกณฑ์', recovery: 'ฟื้นตัว', normal: 'ปกติ' };\n\nconst tUnit = item.tunit || '°C';\nconst hUnit = item.hunit || '%';\nconst thText = hasNum(thresholdTemp) ? ` (TH ${thresholdTemp}${tUnit})` : '';\n\nconst lines = [\n  `${ICONS[statusCategory]} DHT @ ${siteName}`,\n  `🌡️ Temperature: ${f1(item.temp)} ${tUnit}${thText}`,\n  `💧 Humidity: ${f1(item.hum)} ${hUnit}`,\n  `📟 Status: ${STATUS_TEXT[statusCategory]} (${statusCategory}) | 🕒 Time: ${item.ts}`,\n];\nitem.text = lines.join('\\n');\n\n// --- outputs ---\nitem.mode           = modeNow;\nitem.threshold_temp = thresholdTemp;\nitem.status_detail  = status_detail;\nitem.shouldLog      = !!shouldLog;     // ใช้กับ IF → Sheets\nitem.shouldNotify   = !!shouldNotify;  // ใช้กับ IF → Telegram\n\nreturn [item];\n"
+      },
+      "id": "1bfe7628-3021-4780-818a-cb22283ec714",
+      "name": "Gate: 1m (high) / 60m (normal)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse DHT (normalize) — DHT only\nconst SITE          = $json.site ?? $json.site_name ?? $env.SITE_NAME ?? \"MSU_Lab\";\nconst BASE_TOPIC    = $json.baseTopic ?? $json.topic ?? $env.MQTT_BASE_TOPIC ?? \"DHTsensor\";\n// ⬇️ เปลี่ยนบรรทัดนี้\nconst INPUT_THRESHOLD = Number($json.threshold_temp ?? $env.TEMP_THRESHOLD ?? 35);\n\nconst TZ_OFFSET_MIN = Number($env.TZ_OFFSET_MIN ?? 420);\n\n// รับ payload...\nlet payload = $json.message ?? $json;\nif (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch { payload = {}; } }\n\nconst toNum = (v) => {\n  if (v === undefined || v === null) return null;\n  if (typeof v === 'string' && v.trim() === '') return null;\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\n\nconst temp = toNum(payload.temp ?? payload.temperature ?? payload.dht?.temp ?? payload.DHT11?.temp ?? payload.DHT22?.temperature);\nconst hum  = toNum(payload.hum  ?? payload.humidity  ?? payload.dht?.hum  ?? payload.DHT11?.humidity ?? payload.DHT22?.hum);\n\n// คำนวณสถานะจาก threshold ที่ได้จาก Set node (หรือ ENV)\nconst hasThreshold = Number.isFinite(INPUT_THRESHOLD);\nconst isHigh = hasThreshold && temp !== null && temp > INPUT_THRESHOLD;\nconst mode   = isHigh ? 'high' : 'normal';\n\nconst ts = new Date(Date.now() + Number($env.TZ_OFFSET_MIN ?? 420) * 60 * 1000)\n  .toISOString().replace('T',' ').slice(0,19);\n\nconst status_detail = (() => {\n  if (temp === null) return 'temp=N/A';\n  if (!hasThreshold) return `TEMP ${temp}°C (no TH)`;\n  return isHigh\n    ? `TEMP ${temp}°C > TH ${INPUT_THRESHOLD}°C`\n    : `TEMP ${temp}°C ≤ TH ${INPUT_THRESHOLD}°C`;\n})();\n\nreturn [{\n  ts,\n  site: SITE,\n  temp,  tunit: $json.tunit || '°C',\n  hum,   hunit: $json.hunit || '%',\n  threshold_temp: hasThreshold ? INPUT_THRESHOLD : null,\n  mode,\n  isHigh: isHigh ? 1 : 0,\n  isLow : (hasThreshold && temp !== null && temp < INPUT_THRESHOLD) ? 1 : 0,\n  status_detail,\n  baseTopic: BASE_TOPIC,\n}];\n"
+      },
+      "id": "24369b15-24e5-42b7-b9be-d1962f55e23a",
+      "name": "Parse DHT (normalize)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "site",
+              "value": "={{$env.SITE_NAME || 'Wather STA1'}}"
+            },
+            {
+              "name": "baseTopic",
+              "value": "={{$env.MQTT_BASE_TOPIC || 'Wather STA1'}}"
+            },
+            {
+              "name": "threshold_temp",
+              "value": "={{ Number($env.TEMP_THRESHOLD ?? 30) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "90c7145f-ffd4-4638-adae-afb2073c6db8",
+      "name": "Set: Site Name/Threshold",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        128
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "shouldNotify=true": {
+      "main": [
+        [
+          {
+            "node": "Telegram Alert/Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MQTT Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set: Site Name/Threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "shouldLog=true": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate: 1m (high) / 60m (normal)": {
+      "main": [
+        [
+          {
+            "node": "shouldLog=true",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "shouldNotify=true",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse DHT (normalize)": {
+      "main": [
+        [
+          {
+            "node": "Gate: 1m (high) / 60m (normal)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Site Name/Threshold": {
+      "main": [
+        [
+          {
+            "node": "Parse DHT (normalize)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "680d9370-658c-47d4-85a7-d81fbf5789fd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b8482a2807ed1ba7ced61da8eddd0a56130744fd74d8be22b1d503b48a241003"
+  },
+  "id": "dRda4ubNMHn4SjAs",
+  "tags": []
+}
