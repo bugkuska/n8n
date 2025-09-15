@@ -1,0 +1,98 @@
+{
+  "name": "01-Webhook Hello",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -80,
+        -96
+      ],
+      "id": "3d6f7f6c-4c91-42c0-a946-3f738ce520cc",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "path": "webhook/hello",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -608,
+        -96
+      ],
+      "id": "8a2f0f72-447e-44aa-8a46-57789ffa34e8",
+      "name": "Webhook: /webhook/hello (GET)",
+      "webhookId": "59b5b549-9923-417a-9aad-586e5645c503"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c9f1f947-b487-4485-a652-3185235372d4",
+              "name": "Message",
+              "value": "Hello World!!",
+              "type": "string"
+            },
+            {
+              "id": "e9cde10e-92f9-4cc3-9228-b90778e53581",
+              "name": "Timestamp",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -352,
+        -96
+      ],
+      "id": "b4bd1109-b28c-4126-8478-7b161bf9a0a6",
+      "name": "Set: Build Message"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: /webhook/hello (GET)": {
+      "main": [
+        [
+          {
+            "node": "Set: Build Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Build Message": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a9d4e43e-e4be-40b6-bcbe-21464286fe47",
+  "meta": {
+    "instanceId": "b8482a2807ed1ba7ced61da8eddd0a56130744fd74d8be22b1d503b48a241003"
+  },
+  "id": "eNdvKqLGO5r2g9Xr",
+  "tags": []
+}
