@@ -1,0 +1,264 @@
+{
+  "name": "03-MQTT-Google sheet",
+  "nodes": [
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "site",
+              "value": "={{$env.SITE_NAME || 'Wather STA1'}}"
+            },
+            {
+              "name": "baseTopic",
+              "value": "={{$env.MQTT_BASE_TOPIC || 'Wather STA1'}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c6c50b5a-ae75-4908-960b-74b788aeabf7",
+      "name": "Set: Site Name",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "14MZtmFDTAw4RFoIFODQ7K-7uQ-yR09OdS0eZduCmOEM",
+          "mode": "list",
+          "cachedResultName": "n8ndht_logger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/14MZtmFDTAw4RFoIFODQ7K-7uQ-yR09OdS0eZduCmOEM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "dht",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/14MZtmFDTAw4RFoIFODQ7K-7uQ-yR09OdS0eZduCmOEM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ts": "={{$json.ts}}",
+            "site": "={{$json.site}}",
+            "mode": "={{$json.mode}}",
+            "temp": "={{$json.temp}}",
+            "tunit": "={{$json.tunit}}",
+            "hum": "={{$json.hum}}",
+            "hunit": "={{$json.hunit}}",
+            "threshold_temp": "={{$json.threshold_temp}}",
+            "status_detail": "={{$json.status_detail}}",
+            "isHigh": "={{ $json.isHigh }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "site",
+              "displayName": "site",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "temp",
+              "displayName": "temp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "tunit",
+              "displayName": "tunit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hum",
+              "displayName": "hum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hunit",
+              "displayName": "hunit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "threshold_temp",
+              "displayName": "threshold_temp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "isHigh",
+              "displayName": "isHigh",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status_detail",
+              "displayName": "status_detail",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -624,
+        112
+      ],
+      "id": "803d6985-25ce-4f85-8982-891f94d1939b",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "04VJNNtlpHOh2I4V",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "topics": "dht11sensor",
+        "options": {
+          "jsonParseBody": true
+        }
+      },
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        112
+      ],
+      "id": "d9cebef3-02f0-48a2-956f-37c60bd71ae5",
+      "name": "MQTT Trigger",
+      "credentials": {
+        "mqtt": {
+          "id": "T0dygmT25108Qws6",
+          "name": "MQTT account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse DHT → ออกฟิลด์ให้ตรงชีต (ไม่เอา light)\n// คอลัมน์: ts, site, temp, tunit, hum, hunit, threshold_temp, mode, isHigh, isLow, status_detail, baseTopic\n\nconst SITE           = $json.site ?? $json.site_name ?? $env.SITE_NAME ?? \"MSU_Lab\";\nconst BASE_TOPIC     = $json.baseTopic ?? $json.topic ?? $env.MQTT_BASE_TOPIC ?? \"DHTsensor\";\nconst TEMP_SETPT     = Number($env.TEMP_THRESHOLD ?? 35);\nconst TZ_OFFSET_MIN  = Number($env.TZ_OFFSET_MIN ?? 420); // Asia/Bangkok (+07:00)\n\n// รับ payload จาก MQTT Trigger ($json.message เป็น object หรือ string)\nlet payload = $json.message ?? $json;\nif (typeof payload === 'string') {\n  try { payload = JSON.parse(payload); } catch (e) { payload = {}; }\n}\n\n// แปลงตัวเลขแบบปลอดภัย\nconst toNum = (v) => {\n  if (v === undefined || v === null) return null;\n  if (typeof v === 'string' && v.trim() === '') return null;\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\n\n// รองรับ key ที่พบบ่อย: temp / temperature, hum / humidity\nconst temp = toNum(payload.temp ?? payload.temperature);\nconst hum  = toNum(payload.hum  ?? payload.humidity);\n\n// สถานะ (High ถ้า temp > threshold)\nconst isHigh = temp !== null && temp > TEMP_SETPT;\nconst mode   = isHigh ? 'high' : 'normal';\n\n// เวลาโลคัล \"YYYY-MM-DD HH:mm:ss\"\nconst ts = new Date(Date.now() + TZ_OFFSET_MIN * 60 * 1000)\n  .toISOString().replace('T', ' ').slice(0, 19);\n\n// ข้อความสถานะสั้น (ไว้ debug; ข้อความแจ้งเตือนยาวให้สร้างใน Gate)\nconst status_detail = (() => {\n  if (temp === null) return 'temp=N/A';\n  return isHigh\n    ? `TEMP ${temp}°C > TH ${TEMP_SETPT}°C`\n    : `TEMP ${temp}°C ≤ TH ${TEMP_SETPT}°C`;\n})();\n\nreturn [{\n  ts,\n  site: SITE,\n  temp,  tunit: '°C',\n  hum,   hunit: '%',\n  threshold_temp: TEMP_SETPT,\n  mode,                         // 'high' | 'normal'\n  isHigh: isHigh ? 1 : 0,\n  isLow : (temp !== null && temp < TEMP_SETPT) ? 1 : 0,  // คงไว้เพื่อความเข้ากันได้\n  status_detail,\n  baseTopic: BASE_TOPIC,\n}];"
+      },
+      "id": "84984519-b368-4d3c-bab1-e9b4aaf01ccf",
+      "name": "Parse DHT(normalize)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -896,
+        112
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Set: Site Name": {
+      "main": [
+        [
+          {
+            "node": "Parse DHT(normalize)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MQTT Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set: Site Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse DHT(normalize)": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ed06ba0c-4463-4db9-bd8c-7f44fe9fc4fb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b8482a2807ed1ba7ced61da8eddd0a56130744fd74d8be22b1d503b48a241003"
+  },
+  "id": "p2rUYPoBrGnH8HIQ",
+  "tags": []
+}
