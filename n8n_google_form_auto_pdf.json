@@ -1,0 +1,262 @@
+{
+  "name": "n8n_google_form_auto_pdf",
+  "nodes": [
+    {
+      "parameters": {
+        "fromEmail": "bugkuska@gmail.com",
+        "toEmail": "={{ $json.email || $json.body?.['Email Address'] || $json.body?.['Email Address'] }}",
+        "subject": "ไฟล์ E-Book: n8n Zero2Hero IoT Automation",
+        "html": "=<div style=\"font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:560px;margin:auto;padding:16px;border:1px solid #eee;border-radius:12px;line-height:1.6\">\n  <h2 style=\"margin:0 0 12px\">สวัสดีคุณ {{ $json.fullName || \"สมาชิก\" }}</h2>\n\n  <p style=\"margin:0 0 12px\">\n    ขอบคุณสนใจ <b>E-Book: การสร้างฟอร์ม ส่งไฟล์ .pdf </b><br>\n    ระบบได้แนบไฟล์ <b>PDF</b> มาให้เรียบร้อยแล้ว\n  </p>\n\n  <p style=\"margin:0 0 12px\">\n    หากมีข้อสงสัย สามารถทักแชท หรือกดที่ลิงก์ด้านล่างได้เลยครับ:\n    <br>\n    <a href=\"https://www.facebook.com/SMFThailand\" target=\"_blank\" \n       style=\"color:#1877F2;text-decoration:none;font-weight:bold\">\n       👉 ติดต่อผ่าน Facebook Page\n    </a>\n  </p>\n\n  <p style=\"margin:16px 0 0\">ขอให้สนุกกับการเรียนรู้ครับ</p>\n  <p style=\"margin:4px 0 0\">— สมโภช ทองน้ำเที่ยง —</p>\n</div>\n",
+        "options": {
+          "attachments": "data"
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        928,
+        32
+      ],
+      "id": "d076038f-bc83-4156-bffe-c5242a8276c7",
+      "name": "Send email",
+      "webhookId": "b8ccb3c9-bd76-4b89-9a37-bbde9b973582",
+      "credentials": {
+        "smtp": {
+          "id": "tD9zGi5g6G5I9EpS",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "21443656-5261-46a0-9615-a653feb39eb8",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "65de63ad-7f33-4bb3-9b31-e873c179a801",
+      "name": "Webhook (Form Submit)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "21443656-5261-46a0-9615-a653feb39eb8"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "fe991a6b-897e-402e-a1cf-09b3a71f8f6f",
+              "leftValue": "={{$json[\"query\"][\"key\"]}}",
+              "rightValue": "0814111142",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "46e407fc-f6cc-40fc-9929-48374344b484",
+      "name": "IF: Check Secret Key",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        208,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "63b6e8c0-e300-4c62-9916-a42cae5b2687",
+      "name": "Merge (Email + PDF)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        768,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "14052da2-9b27-44d5-a5f7-5824baacaba0",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1136,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "58832902-1441-45a1-a050-d099f9f7086b",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        144,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "1VQ3eMprQrVXWjAUzt2KyEH6vXhNQcY28",
+          "mode": "list",
+          "cachedResultName": "Register_form_auto_send_pdf_n8n.pdf",
+          "cachedResultUrl": "https://drive.google.com/file/d/1VQ3eMprQrVXWjAUzt2KyEH6vXhNQcY28/view?usp=drivesdk"
+        },
+        "options": {
+          "fileName": "={{ $json.name }}"
+        }
+      },
+      "id": "bcea13e1-789a-438c-9cc2-1f63f8019dc1",
+      "name": "Google Drive → Download PDF1",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        624,
+        304
+      ],
+      "notesInFlow": true,
+      "credentials": {
+        "googleApi": {
+          "id": "ePfHUHDFvBFwQv3H",
+          "name": "Google Drive account"
+        }
+      },
+      "notes": "แนะนำใช้ File ID แบบคงที่ (เปิดไฟล์ใน Drive แล้วคัดลอกค่า ID จาก URL)"
+    },
+    {
+      "parameters": {
+        "functionCode": "const incoming = items[0].json;\nconst body = incoming.body || {};\n\nconst fullName = body['ชื่อ-นามสกุล'] || '';\nconst email    = body['Email Address'] || '';\nconst aa  = body['ข้อเสนอะ'] || '';\n\nreturn [{\n  json: { fullName, email, aa }\n}];\n"
+      },
+      "id": "e3ada547-3985-43f1-8c92-70168a81aadb",
+      "name": "Pick Email",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        496,
+        16
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook (Form Submit)": {
+      "main": [
+        [
+          {
+            "node": "IF: Check Secret Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Check Secret Key": {
+      "main": [
+        [
+          {
+            "node": "Google Drive → Download PDF1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Pick Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge (Email + PDF)": {
+      "main": [
+        [
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send email": {
+      "main": [
+        [
+          {
+            "node": "Respond 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive → Download PDF1": {
+      "main": [
+        [
+          {
+            "node": "Merge (Email + PDF)",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Pick Email": {
+      "main": [
+        [
+          {
+            "node": "Merge (Email + PDF)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "99fb4b14-d943-4cb1-852f-147abb8e31cf",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2a87796036949c84fa5e61b680ceaa5c3cb3c23c0a1edd986e2e77080a9bf147"
+  },
+  "id": "xrzUzWeQjmLRtF8Z",
+  "tags": []
+}
