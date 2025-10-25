@@ -64,7 +64,6 @@ void setup() {
 
   // Modbus Master
   node.begin(SLAVE_ID, Serial2);
-  node.setTimeout(200);   // ms
 
   // โหลด MQTT config
   loadConfigFromNVS();
