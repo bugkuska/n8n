@@ -1,0 +1,85 @@
+{
+  "name": "Get-LineGroupID",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "linegroupid",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -400,
+        -96
+      ],
+      "id": "5e907751-d283-4899-9a25-184a72144df4",
+      "name": "Webhook",
+      "webhookId": "2f5b29a7-426f-4067-87a0-9ac93acbe9d1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ดึง id และข้อความจาก payload ของ LINE\nconst ev = $json.body?.events?.[0] || {};\nreturn [{\n  chatType: ev.source?.type || null,          // user | group | room\n  groupId: ev.source?.groupId || ev.source?.roomId || null,\n  userId: ev.source?.userId || null,\n  eventType: ev.type || null,                  // message | join | ฯลฯ\n  text: ev.message?.text || null\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -96
+      ],
+      "id": "7a1cde68-cf21-4f18-a351-726814d638f2",
+      "name": "Function (Extract Group/Room/User ID)"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"ok\": true,\n  \"chatType\": \"={{$json.chatType}}\",\n  \"groupId\": \"={{$json.groupId}}\",\n  \"userId\": \"={{$json.userId}}\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        16,
+        -96
+      ],
+      "id": "48c2da49-5b30-4f6e-b529-3cb82fa3ff2b",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Function (Extract Group/Room/User ID)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function (Extract Group/Room/User ID)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2a053dbd-c097-421d-9a0e-e7157db09d35",
+  "meta": {
+    "instanceId": "978d8930210213c8240fed8bd1add449544bf495fdf35156a342907e6eb6933d"
+  },
+  "id": "JxBjTYHg0Qa6Pc5C",
+  "tags": []
+}
