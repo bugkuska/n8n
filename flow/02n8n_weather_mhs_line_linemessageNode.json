@@ -1,0 +1,254 @@
+{
+  "name": "02n8n_weather_mhs_line_linemessageNode",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 6
+            },
+            {
+              "hour": 12
+            },
+            {
+              "hour": 19
+            }
+          ]
+        }
+      },
+      "name": "Cron",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        -1440,
+        -288
+      ],
+      "id": "03b857e2-9e3a-4075-b835-d36f5cb9d4c7"
+    },
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1440,
+        -480
+      ],
+      "id": "6161a9f4-309a-4079-b9d8-4127a7043910"
+    },
+    {
+      "parameters": {
+        "url": "={{\"https://api.open-meteo.com/v1/forecast?latitude=\" + (16.1863) + \"&longitude=\" + (103.3000) + \"&current_weather=true&hourly=temperature_2m,precipitation_probability,relative_humidity_2m&forecast_days=1&timezone=Asia%2FBangkok\"}}",
+        "options": {}
+      },
+      "name": "HTTP Request (Open-Meteo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1216,
+        -384
+      ],
+      "id": "cd1cab18-8b96-4e84-9cc2-426df48255d0"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cw = $json.current_weather || {};\nconst hourly = $json.hourly || {};\n\nconst temp = cw.temperature ?? null;\nconst rain = hourly.precipitation_probability?.[0] ?? null;\nconst hum  = hourly.relative_humidity_2m?.[0] ?? null;\n\nconst alert = (temp >= 25) || (rain >= 60);\n\nconst msg = [\n  `🌤️ รายงานสภาพอากาศปัจจุบัน`,\n  `🌡️ อุณหภูมิ: ${temp?.toFixed?.(1) ?? 'N/A'}°C`,\n  `💧 ความชื้นสัมพัทธ์: ${hum ?? 'N/A'}%`,\n  `🌧️ โอกาสฝน: ${rain ?? 'N/A'}%`,\n  alert ? `⚠️ แจ้งเตือน: อุณหภูมิสูงหรือฝนมาก` : `✅ สภาพอากาศปกติ`,\n  `🕒 เวลา: ${cw.time || 'ไม่ระบุ'}`\n].join('\\n');\n\nreturn [{ json: { alert, message: msg, temp, hum, rain } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -992,
+        -384
+      ],
+      "id": "f0e9fdfe-1451-43d1-b58e-7abc088225cf",
+      "name": "Function(สรุป/ตัดสินใจ)"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uf959625c07c939e826d15416141c3174"
+            },
+            {
+              "name": "={{ $json.message }}",
+              "value": "test"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        -384
+      ],
+      "id": "10e76d61-6bda-4ac5-884a-7ec46eb47180",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a3c6894-7f9a-4037-8771-efa36270e9f8",
+              "leftValue": "={{$json.alert}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -768,
+        -384
+      ],
+      "id": "77c58c64-0b61-436d-b67c-dd5feaaab140",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.message }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        -384
+      ],
+      "id": "4d88dbd2-4fc9-4acf-8361-7ea277abdc8b",
+      "name": "LineMessageNode"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target)').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        -384
+      ],
+      "id": "d7628300-eb70-43f3-802f-f3450f6121f2",
+      "name": "LineMessaging",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "pTNOUR5YOIYZfi2T",
+          "name": "Line Messaging Auth account#zero2hero#1"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cron": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request (Open-Meteo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request (Open-Meteo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request (Open-Meteo)": {
+      "main": [
+        [
+          {
+            "node": "Function(สรุป/ตัดสินใจ)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function(สรุป/ตัดสินใจ)": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "LineMessageNode": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "231755f0-831c-4e1f-b488-8b09879b1e79",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ae77891e61682ce507d6ded849cca0156c91ca717c15eeed76eb0533f2ae6f80"
+  },
+  "id": "QL6hupBIoff8Ii6A",
+  "tags": []
+}
