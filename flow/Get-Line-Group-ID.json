@@ -1,0 +1,86 @@
+{
+  "name": "Get-LineGroupID",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "linegroupid",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        560,
+        304
+      ],
+      "id": "da3ec45a-99ca-4671-9081-34b93e1a898c",
+      "name": "Webhook",
+      "webhookId": "2f5b29a7-426f-4067-87a0-9ac93acbe9d1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ดึง id และข้อความจาก payload ของ LINE\nconst ev = $json.body?.events?.[0] || {};\nreturn [{\n  chatType: ev.source?.type || null,          // user | group | room\n  groupId: ev.source?.groupId || ev.source?.roomId || null,\n  userId: ev.source?.userId || null,\n  eventType: ev.type || null,                  // message | join | ฯลฯ\n  text: ev.message?.text || null\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        304
+      ],
+      "id": "a4921efe-6b9e-467c-89c6-936638499f1b",
+      "name": "Function (Extract Group/Room/User ID)"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"ok\": true,\n  \"chatType\": \"={{$json.chatType}}\",\n  \"groupId\": \"={{$json.groupId}}\",\n  \"userId\": \"={{$json.userId}}\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        976,
+        304
+      ],
+      "id": "20b8a15f-1615-48cf-896f-af72460371e1",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Function (Extract Group/Room/User ID)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function (Extract Group/Room/User ID)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7c566c91-852b-402a-a24b-1a3bd9bbd937",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ae77891e61682ce507d6ded849cca0156c91ca717c15eeed76eb0533f2ae6f80"
+  },
+  "id": "nAB3Abtom3gdznl6",
+  "tags": []
+}
