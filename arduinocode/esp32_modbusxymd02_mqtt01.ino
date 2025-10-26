@@ -38,7 +38,7 @@ char buf_mqtt_host[64] = "";
 char buf_mqtt_port[8]  = "1883";
 char buf_mqtt_user[40] = "";
 char buf_mqtt_pass[40] = "";
-char buf_mqtt_topic[40]= "xy-md02";
+char buf_mqtt_topic[40]= "xymd02";
 
 // Poll interval (ms)
 volatile unsigned long gInterval = 5000;
