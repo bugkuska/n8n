@@ -1,0 +1,264 @@
+{
+  "name": "03-MQTT-xymd02-Google sheet",
+  "nodes": [
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "site",
+              "value": "={{$env.SITE_NAME || 'Wather STA1'}}"
+            },
+            {
+              "name": "baseTopic",
+              "value": "={{$env.MQTT_BASE_TOPIC || 'Wather STA1'}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b4dfd7a8-e8e0-4624-ba72-f61d9a39c7f6",
+      "name": "Set: Site Name",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        -496
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU",
+          "mode": "list",
+          "cachedResultName": "n8nxy-md02_logger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "xy-md02",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ts": "={{$json.ts}}",
+            "site": "={{$json.site}}",
+            "mode": "={{$json.mode}}",
+            "temp": "={{$json.temp}}",
+            "tunit": "={{$json.tunit}}",
+            "hum": "={{$json.hum}}",
+            "hunit": "={{$json.hunit}}",
+            "threshold_temp": "={{$json.threshold_temp}}",
+            "status_detail": "={{$json.status_detail}}",
+            "isHigh": "={{ $json.isHigh }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "site",
+              "displayName": "site",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "temp",
+              "displayName": "temp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "tunit",
+              "displayName": "tunit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hum",
+              "displayName": "hum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hunit",
+              "displayName": "hunit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "threshold_temp",
+              "displayName": "threshold_temp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "isHigh",
+              "displayName": "isHigh",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status_detail",
+              "displayName": "status_detail",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -160,
+        -496
+      ],
+      "id": "64937d37-fba1-4319-b90a-2d8b6c0b7357",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "RUv1kTtSucsBEEbA",
+          "name": "Google Service Account account#zero2hero#1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "topics": "xymd02",
+        "options": {
+          "jsonParseBody": true
+        }
+      },
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [
+        -832,
+        -496
+      ],
+      "id": "a109b037-2205-4bd1-9105-b77ce5e1861e",
+      "name": "MQTT Trigger-zero2hero#1",
+      "credentials": {
+        "mqtt": {
+          "id": "yzb3rPCDhcnA9IgT",
+          "name": "MQTT account#zero2hero#1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse xymd02 (Modbus XY-MD02)\n// คอลัมน์: ts, site, temp, tunit, hum, hunit, threshold_temp, mode, isHigh, isLow, status_detail, baseTopic\n\nconst SITE           = $json.site ?? $json.site_name ?? $env.SITE_NAME ?? \"MSU_Lab\";\nconst BASE_TOPIC     = $json.baseTopic ?? $json.topic ?? $env.MQTT_BASE_TOPIC ?? \"XYMD02\";\nconst TEMP_SETPT     = Number($env.TEMP_THRESHOLD ?? 35);\nconst TZ_OFFSET_MIN  = Number($env.TZ_OFFSET_MIN ?? 420); // Asia/Bangkok (+07:00)\n\n// ---- รับ payload จาก MQTT Trigger ($json.message เป็น object หรือ string) ----\nlet payload = $json.message ?? $json;\nif (typeof payload === 'string') {\n  try { payload = JSON.parse(payload); } catch (e) { payload = {}; }\n}\n\n// ---- helpers ----\nconst toNum = (v) => {\n  if (v === undefined || v === null) return null;\n  if (typeof v === 'string' && v.trim() === '') return null;\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\n\n// ตรวจว่าเป็น \"ค่าดิบ x10\" ที่ควรหาร 10 หรือไม่ (เช่น 275 -> 27.5)\nconst maybeScale10 = (n) => {\n  if (n === null) return null;\n  // เงื่อนไขเดาง่าย ๆ: ถ้าเป็นจำนวนเต็มและมีค่าสมเหตุสมผล > 100 ให้ลองหาร 10\n  if (Number.isInteger(n) && Math.abs(n) >= 100) return n / 10;\n  return n;\n};\n\n// ดึงค่าแบบลองหลายคีย์ที่พบบ่อย\nconst pickFirst = (...keys) => {\n  for (const k of keys) {\n    const val = toNum(k);\n    if (val !== null) return val;\n  }\n  return null;\n};\n\n// ---- ดึงค่า temp/hum จากหลายรูปแบบที่เป็นไปได้ ----\n// 1) รูปแบบคีย์ชื่อพบบ่อย\nlet temp = pickFirst(\n  payload.temp, payload.temperature, payload.temp_c, payload.tC, payload.T,\n  payload.xymd02_temp, payload.t, payload['Temp(°C)'], payload['TEMP']\n);\n\nlet hum  = pickFirst(\n  payload.hum, payload.humidity, payload.rh, payload.RH, payload.H,\n  payload.xymd02_hum, payload['Hum(%)'], payload['HUM'], payload.h\n);\n\n// 2) ถ้ามี temp_raw / hum_raw ให้แปลง\nif (temp === null) temp = maybeScale10(toNum(payload.temp_raw));\nif (hum  === null) hum  = maybeScale10(toNum(payload.hum_raw));\n\n// 3) ถ้ามีโครงสร้าง registers หรือ holding/input registers (เช่น { registers:[temp_x10, hum_x10] } หรือ { r0:xxx, r1:yyy })\nif ((temp === null || hum === null) && payload.registers) {\n  const r = payload.registers;\n  // รองรับทั้ง array และ object\n  const r0 = Array.isArray(r) ? r[0] : (r['0'] ?? r.r0 ?? r.reg0);\n  const r1 = Array.isArray(r) ? r[1] : (r['1'] ?? r.r1 ?? r.reg1);\n  if (temp === null) temp = maybeScale10(toNum(r0));\n  if (hum  === null) hum  = maybeScale10(toNum(r1));\n}\n\n// 4) เผื่ออุปกรณ์ส่งเข้ามาเป็น { data:{ temp:..., hum:... } }\nif ((temp === null || hum === null) && payload.data && typeof payload.data === 'object') {\n  if (temp === null) temp = maybeScale10(pickFirst(payload.data.temp, payload.data.temperature, payload.data.temp_raw));\n  if (hum  === null) hum  = maybeScale10(pickFirst(payload.data.hum, payload.data.humidity, payload.data.hum_raw, payload.data.rh));\n}\n\n// สถานะ (High ถ้า temp > threshold)\nconst isHigh = temp !== null && temp > TEMP_SETPT;\nconst mode   = isHigh ? 'high' : 'normal';\n\n// เวลาโลคัล \"YYYY-MM-DD HH:mm:ss\" (อิง offset)\nconst ts = new Date(Date.now() + TZ_OFFSET_MIN * 60 * 1000)\n  .toISOString().replace('T', ' ').slice(0, 19);\n\n// ข้อความสถานะสั้น (debug)\nconst status_detail = (() => {\n  if (temp === null && hum === null) return 'no XY-MD02 fields';\n  if (temp === null) return 'temp=N/A';\n  return isHigh\n    ? `TEMP ${temp}°C > TH ${TEMP_SETPT}°C`\n    : `TEMP ${temp}°C ≤ TH ${TEMP_SETPT}°C`;\n})();\n\nreturn [{\n  ts,\n  site: SITE,\n  temp,  tunit: '°C',\n  hum,   hunit: '%',\n  threshold_temp: TEMP_SETPT,\n  mode,                         // 'high' | 'normal'\n  isHigh: isHigh ? 1 : 0,\n  isLow : (temp !== null && temp < TEMP_SETPT) ? 1 : 0,  // คงไว้เพื่อความเข้ากันได้\n  status_detail,\n  baseTopic: BASE_TOPIC,\n}];"
+      },
+      "id": "1ecf338c-c8b0-48bd-9e43-0bdd89bc08f5",
+      "name": "Parse xymd02(normalize)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        -496
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Set: Site Name": {
+      "main": [
+        [
+          {
+            "node": "Parse xymd02(normalize)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MQTT Trigger-zero2hero#1": {
+      "main": [
+        [
+          {
+            "node": "Set: Site Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse xymd02(normalize)": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "87af058b-9221-490f-9f8f-cdcf81ea16a4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ae77891e61682ce507d6ded849cca0156c91ca717c15eeed76eb0533f2ae6f80"
+  },
+  "id": "sbWlxyaKCYmnM4YO",
+  "tags": []
+}
