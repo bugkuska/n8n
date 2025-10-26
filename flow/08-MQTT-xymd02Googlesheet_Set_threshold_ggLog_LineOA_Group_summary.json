@@ -1,0 +1,977 @@
+{
+  "name": "08-MQTT-xymd02Googlesheet_Set_threshold_ggLog_LineOA_Group_summary",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e864e34c-5ba8-4a44-a86c-79e54b8b6dab",
+              "leftValue": "={{$json.shouldNotify}}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1db106d-8107-4926-bd0d-b62f25be7521",
+      "name": "shouldNotify=true",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU",
+          "mode": "list",
+          "cachedResultName": "n8nxy-md02_logger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "xy-md02",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "baseTopic": "={{ $json.baseTopic }}",
+            "value_source": "={{ $json.value_source }}",
+            "status_detail": "={{ $json.status_detail }}",
+            "isHigh": "={{ $json.isHigh }}",
+            "mode": "={{ $json.mode }}",
+            "threshold_temp": "={{ $json.threshold_temp }}",
+            "hunit": "={{ $json.hunit }}",
+            "hum": "={{ $json.hum }}",
+            "tunit": "={{ $json.tunit }}",
+            "temp": "={{ $json.temp }}",
+            "site": "={{ $json.site }}",
+            "ts": "={{ $json.ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "site",
+              "displayName": "site",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "temp",
+              "displayName": "temp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tunit",
+              "displayName": "tunit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hum",
+              "displayName": "hum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hunit",
+              "displayName": "hunit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "threshold_temp",
+              "displayName": "threshold_temp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "isHigh",
+              "displayName": "isHigh",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status_detail",
+              "displayName": "status_detail",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "baseTopic",
+              "displayName": "baseTopic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "value_source",
+              "displayName": "value_source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -336,
+        -320
+      ],
+      "id": "0b5f77f1-0f06-45a8-bb78-5e3fafc7dfdd",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "RUv1kTtSucsBEEbA",
+          "name": "Google Service Account account#zero2hero#1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "topics": "xymd02",
+        "options": {
+          "jsonParseBody": true
+        }
+      },
+      "type": "n8n-nodes-base.mqttTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1456,
+        -224
+      ],
+      "id": "d0f83ad6-51e6-43c0-9035-43eabae17c48",
+      "name": "MQTT Trigger",
+      "credentials": {
+        "mqtt": {
+          "id": "yzb3rPCDhcnA9IgT",
+          "name": "MQTT account#zero2hero#1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e864e34c-5ba8-4a44-a86c-79e54b8b6dab",
+              "leftValue": "={{$json.shouldLog}}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "29810398-e750-4a17-b97b-09b6c4c0d28e",
+      "name": "shouldLog=true",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gate: 1m (high) / 60m (normal) — Generic (DHT or XY-MD02) + Telegram flags\n\n// --- config (ENV + per-item overrides) ---\nconst HIGH_EVERY_MIN_DEFAULT   = Number($env.HIGH_EVERY_MIN   ?? 1);   // high: ทุก X นาที\nconst NORMAL_EVERY_MIN_DEFAULT = Number($env.NORMAL_EVERY_MIN ?? 60);  // normal: ทุก X นาที\n\nconst item  = { ...$json };\nconst nowMs = Date.now();\n\n// --- identity (unique key per device/stream) ---\nconst siteName  = item.site || 'default';\nconst baseTopic = item.baseTopic || item.topic || 'XYMD02'; // เดิม DHTsensor → ใช้ XYMD02 เป็น fallback (ถ้าส่งมาเป็น DHTsensor จะเคารพค่านั้น)\nconst sensorId  = item.sensor_id ?? item.slave_id ?? item.device_id ?? null;\nconst sensorKey = sensorId ? `${siteName}::${baseTopic}::${sensorId}` : `${siteName}::${baseTopic}`;\n\n// --- per-item overrides for periods ---\nconst highEveryMin   = Number.isFinite(Number(item.high_every_min))   ? Number(item.high_every_min)   : HIGH_EVERY_MIN_DEFAULT;\nconst normalEveryMin = Number.isFinite(Number(item.normal_every_min)) ? Number(item.normal_every_min) : NORMAL_EVERY_MIN_DEFAULT;\n\n// --- global state ---\nconst g = getWorkflowStaticData('global');\ng._gate      = g._gate      || {};\ng._lastValid = g._lastValid || {};\n\ng._gate[sensorKey] = g._gate[sensorKey] || { lastMode: 'normal', lastHighAt: 0, lastNormalAt: 0, initDone: false };\ng._lastValid[sensorKey] = g._lastValid[sensorKey] || { temp: null, hum: null };\n\n// --- helpers ---\nconst hasNum = v => {\n  if (v === '' || v === null || v === undefined) return false;\n  const n = Number(v);\n  return Number.isFinite(n);\n};\nconst pick = (cur, last) => (hasNum(cur) ? Number(cur) : (hasNum(last) ? Number(last) : null));\nconst f1   = v => (hasNum(v) ? Number(v).toFixed(1) : '—');\n\n// --- last valid tracking ---\nif (hasNum(item.temp)) g._lastValid[sensorKey].temp = Number(item.temp);\nif (hasNum(item.hum))  g._lastValid[sensorKey].hum  = Number(item.hum);\n\n// --- fallback to last valid if missing ---\nitem.temp = pick(item.temp, g._lastValid[sensorKey].temp);\nitem.hum  = pick(item.hum,  g._lastValid[sensorKey].hum);\nitem.value_source = (hasNum($json.temp) || hasNum($json.hum)) ? 'current' : 'last';\n\n// --- threshold & mode ---\nconst thresholdTemp = hasNum(item.threshold_temp)\n  ? Number(item.threshold_temp)\n  : (hasNum($env.TEMP_THRESHOLD) ? Number($env.TEMP_THRESHOLD) : 35);\n\nlet modeNow = (item.mode === 'high' || item.mode === 'normal') ? item.mode : 'normal';\nif (hasNum(item.temp)) modeNow = (Number(item.temp) > thresholdTemp) ? 'high' : 'normal';\n\nconst prevMode = g._gate[sensorKey].lastMode;\n\n// --- decide frequency (log & notify) ---\nlet shouldLog = false;\nlet shouldNotify = false;\nlet status_detail = 'normal_periodic';\n\n// ยิง log/notify แรกสุดของอุปกรณ์นี้ (init) เพื่อไม่ต้องรอครบช่วงเวลา\nif (!g._gate[sensorKey].initDone) {\n  shouldLog = true;\n  shouldNotify = true;\n  status_detail = 'init';\n  if (modeNow === 'high') g._gate[sensorKey].lastHighAt = nowMs;\n  else                    g._gate[sensorKey].lastNormalAt = nowMs;\n  g._gate[sensorKey].initDone = true;\n} else if (modeNow === 'high') {\n  const due = nowMs >= g._gate[sensorKey].lastHighAt + highEveryMin * 60 * 1000;\n  if (due) {\n    shouldLog = true;\n    shouldNotify = true;\n    g._gate[sensorKey].lastHighAt = nowMs;\n  }\n  status_detail = 'high';\n} else {\n  if (prevMode === 'high') {\n    // recovery: แจ้ง & บันทึกทันที 1 ครั้ง\n    shouldLog = true;\n    shouldNotify = true;\n    status_detail = 'recovery';\n    g._gate[sensorKey].lastNormalAt = nowMs;\n  } else {\n    const due = nowMs >= g._gate[sensorKey].lastNormalAt + normalEveryMin * 60 * 1000;\n    if (due) {\n      shouldLog = true;\n      shouldNotify = true;\n      g._gate[sensorKey].lastNormalAt = nowMs;\n    }\n    status_detail = 'normal_periodic';\n  }\n}\ng._gate[sensorKey].lastMode = modeNow;\n\n// --- build Telegram text (plain text) ---\nconst statusCategory =\n  status_detail === 'high'     ? 'high' :\n  status_detail === 'recovery' ? 'recovery' :\n  status_detail === 'init'     ? 'init' : 'normal';\n\nconst ICONS = { high: '🔥', recovery: '🟢', normal: '✅', init: '🆕' };\nconst STATUS_TEXT = { high: 'สูงเกินเกณฑ์', recovery: 'ฟื้นตัว', normal: 'ปกติ', init: 'เริ่มต้น' };\n\nconst tUnit = item.tunit || '°C';\nconst hUnit = item.hunit || '%';\nconst thText = hasNum(thresholdTemp) ? ` (TH ${thresholdTemp}${tUnit})` : '';\nconst title = `${ICONS[statusCategory]} ${baseTopic} @ ${siteName}`; // ทำให้ generic (ไม่ fix ว่า DHT)\n\nconst lines = [\n  title,\n  `🌡️ Temperature: ${f1(item.temp)} ${tUnit}${thText}`,\n  `💧 Humidity: ${f1(item.hum)} ${hUnit}`,\n  `📟 Status: ${STATUS_TEXT[statusCategory]} (${statusCategory})${item.ts ? ` | 🕒 Time: ${item.ts}` : ''}`,\n];\nitem.text = lines.join('\\n');\n\n// --- outputs ---\nitem.mode             = modeNow;\nitem.threshold_temp   = thresholdTemp;\nitem.status_detail    = status_detail;\nitem.shouldLog        = !!shouldLog;     // ใช้กับ IF → Sheets\nitem.shouldNotify     = !!shouldNotify;  // ใช้กับ IF → Telegram\nitem.gate_key         = sensorKey;\nitem.high_every_min   = highEveryMin;\nitem.normal_every_min = normalEveryMin;\n\nreturn [item];"
+      },
+      "id": "45447b4a-b1bf-4d87-a66d-da9ab12d722e",
+      "name": "Gate: 1m (high) / 60m (normal)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -784,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "site",
+              "value": "={{$env.SITE_NAME || 'Wather STA1'}}"
+            },
+            {
+              "name": "baseTopic",
+              "value": "={{$env.MQTT_BASE_TOPIC || 'Wather STA1'}}"
+            },
+            {
+              "name": "threshold_temp",
+              "value": "={{ Number($env.TEMP_THRESHOLD ?? 30) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4b186d48-bde7-4f5e-bef9-4bf562a538b0",
+      "name": "Set: Site Name/Threshold",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse EnvSensor (normalize) — DHT + XY-MD02 (Modbus-compatible)\n// Output: ts, site, temp, tunit, hum, hunit, threshold_temp, mode, isHigh, isLow, status_detail, baseTopic\n\nconst SITE          = $json.site ?? $json.site_name ?? $env.SITE_NAME ?? \"MSU_Lab\";\nconst BASE_TOPIC    = $json.baseTopic ?? $json.topic ?? $env.MQTT_BASE_TOPIC ?? \"DHTsensor\";\n// ใช้ threshold จาก $json ก่อน แล้วค่อยตกไป ENV (ตามที่คุณตั้งใจ)\nconst INPUT_THRESHOLD = Number($json.threshold_temp ?? $env.TEMP_THRESHOLD ?? 35);\nconst TZ_OFFSET_MIN = Number($env.TZ_OFFSET_MIN ?? 420);\n\n// ---- รับ payload ----\nlet payload = $json.message ?? $json;\nif (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch { payload = {}; } }\n\n// ---- helpers ----\nconst toNum = (v) => {\n  if (v === undefined || v === null) return null;\n  if (typeof v === 'string' && v.trim() === '') return null;\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\n// เดาสเกล x10 ของค่าดิบเรจิสเตอร์ (เช่น 275 → 27.5)\nconst maybeScale10 = (n) => (n !== null && Number.isInteger(n) && Math.abs(n) >= 100) ? n / 10 : n;\nconst pickFirstNum = (...cands) => {\n  for (const c of cands) { const n = toNum(c); if (n !== null) return n; }\n  return null;\n};\n\n// ---- ดึง temp/hum: รองรับทั้ง DHT style และ Modbus style ----\n// DHT-style คีย์ที่พบบ่อย\nlet temp = pickFirstNum(\n  payload.temp, payload.temperature, payload.dht?.temp,\n  payload.DHT11?.temp, payload.DHT22?.temperature, payload.temp_c, payload.tC, payload.T\n);\nlet hum  = pickFirstNum(\n  payload.hum, payload.humidity, payload.dht?.hum,\n  payload.DHT11?.humidity, payload.DHT22?.hum, payload.rh, payload.RH\n);\n\n// Modbus raw (มักคูณ 10)\nif (temp === null) temp = maybeScale10(toNum(payload.temp_raw));\nif (hum  === null) hum  = maybeScale10(toNum(payload.hum_raw));\n\n// Modbus registers: { registers:[t_x10, h_x10] } หรือ object {r0,r1}/{\"0\",\"1\"}\nif ((temp === null || hum === null) && payload.registers) {\n  const r = payload.registers;\n  const r0 = Array.isArray(r) ? r[0] : (r['0'] ?? r.r0 ?? r.reg0);\n  const r1 = Array.isArray(r) ? r[1] : (r['1'] ?? r.r1 ?? r.reg1);\n  if (temp === null) temp = maybeScale10(toNum(r0));\n  if (hum  === null) hum  = maybeScale10(toNum(r1));\n}\n\n// ซ้อนใน data: { data:{ temp:..., hum:... } }\nif ((temp === null || hum === null) && payload.data && typeof payload.data === 'object') {\n  if (temp === null) temp = maybeScale10(pickFirstNum(payload.data.temp, payload.data.temperature, payload.data.temp_raw));\n  if (hum  === null) hum  = maybeScale10(pickFirstNum(payload.data.hum, payload.data.humidity, payload.data.hum_raw, payload.data.rh));\n}\n\n// ---- mode/threshold ----\nconst hasThreshold = Number.isFinite(INPUT_THRESHOLD);\nconst isHigh = hasThreshold && temp !== null && temp > INPUT_THRESHOLD;\nconst mode   = isHigh ? 'high' : 'normal';\n\n// ---- เวลาโลคัล \"YYYY-MM-DD HH:mm:ss\" ----\nconst ts = new Date(Date.now() + TZ_OFFSET_MIN * 60 * 1000)\n  .toISOString().replace('T',' ').slice(0,19);\n\n// ---- ข้อความสั้นเพื่อ debug ----\nconst status_detail = (() => {\n  if (temp === null) return 'temp=N/A';\n  if (!hasThreshold) return `TEMP ${temp}°C (no TH)`;\n  return isHigh\n    ? `TEMP ${temp}°C > TH ${INPUT_THRESHOLD}°C`\n    : `TEMP ${temp}°C ≤ TH ${INPUT_THRESHOLD}°C`;\n})();\n\nreturn [{\n  ts,\n  site: SITE,\n  temp,  tunit: $json.tunit || '°C',\n  hum,   hunit: $json.hunit || '%',\n  threshold_temp: hasThreshold ? INPUT_THRESHOLD : null,\n  mode,\n  isHigh: isHigh ? 1 : 0,\n  isLow : (hasThreshold && temp !== null && temp < INPUT_THRESHOLD) ? 1 : 0,\n  status_detail,\n  baseTopic: BASE_TOPIC,\n}];"
+      },
+      "id": "d641a9de-70ed-4d57-9baf-7723edd403dd",
+      "name": "Parse xymd02(normalize)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1008,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "togroup",
+              "value": "=C718435f5bb92c629c17e955267f9eda4"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -336,
+        -128
+      ],
+      "id": "f08e7c09-1b4b-4e67-a472-47f76c6f81ed",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "flex",
+        "altText": "=สรุปสถานี {{ $json.site }}",
+        "flexContent": "={\n  \"type\": \"bubble\",\n  \"size\": \"mega\",\n\n  \"header\": {\n    \"type\": \"box\",\n    \"layout\": \"horizontal\",\n    \"paddingAll\": \"12px\",\n    \"contents\": [\n      {\n        \"type\": \"text\",\n        \"text\": {{ JSON.stringify(`📍 ${$json.site}`) }},\n        \"weight\": \"bold\",\n        \"size\": \"lg\",\n        \"wrap\": true\n      },\n      {\n        \"type\": \"text\",\n        \"text\": {{ JSON.stringify(($json.mode?.toUpperCase?.()) || \"NORMAL\") }},\n        \"size\": \"xs\",\n        \"align\": \"end\",\n        \"color\": {{ ($json.isHigh ? JSON.stringify(\"#ef4444\") : $json.isLow ? JSON.stringify(\"#0ea5e9\") : JSON.stringify(\"#6b7280\")) }}\n      }\n    ]\n  },\n\n  \"body\": {\n    \"type\": \"box\",\n    \"layout\": \"vertical\",\n    \"spacing\": \"md\",\n    \"contents\": [\n      { \"type\": \"separator\" },\n\n      {\n        \"type\": \"box\",\n        \"layout\": \"vertical\",\n        \"spacing\": \"sm\",\n        \"margin\": \"md\",\n        \"contents\": [\n          {\n            \"type\": \"box\",\n            \"layout\": \"horizontal\",\n            \"contents\": [\n              { \"type\": \"text\", \"text\": \"🌡️ Temperature\", \"size\": \"sm\", \"color\": \"#6b7280\", \"flex\": 4 },\n              { \"type\": \"text\", \"text\": {{ JSON.stringify(`${$json.temp} °C`) }}, \"size\": \"sm\", \"align\": \"end\", \"flex\": 3 }\n            ]\n          },\n          {\n            \"type\": \"box\",\n            \"layout\": \"horizontal\",\n            \"contents\": [\n              { \"type\": \"text\", \"text\": \"🎯 Threshold\", \"size\": \"sm\", \"color\": \"#6b7280\", \"flex\": 4 },\n              { \"type\": \"text\", \"text\": {{ JSON.stringify(`${$json.threshold_temp} °C`) }}, \"size\": \"sm\", \"align\": \"end\", \"flex\": 3 }\n            ]\n          },\n          {\n            \"type\": \"box\",\n            \"layout\": \"horizontal\",\n            \"contents\": [\n              { \"type\": \"text\", \"text\": \"💧 Humidity\", \"size\": \"sm\", \"color\": \"#6b7280\", \"flex\": 4 },\n              { \"type\": \"text\", \"text\": {{ JSON.stringify(`${$json.hum} %`) }}, \"size\": \"sm\", \"align\": \"end\", \"flex\": 3 }\n            ]\n          }\n        ]\n      },\n\n      {\n        \"type\": \"box\",\n        \"layout\": \"baseline\",\n        \"margin\": \"md\",\n        \"contents\": [\n          {\n            \"type\": \"text\",\n            \"text\": {{ JSON.stringify($json.status_detail ? `🟩 Status: ${$json.status_detail}` : \"🟩 Status: normal\") }},\n            \"size\": \"sm\",\n            \"wrap\": true,\n            \"color\": {{ ($json.isHigh ? JSON.stringify(\"#ef4444\") : $json.isLow ? JSON.stringify(\"#0ea5e9\") : JSON.stringify(\"#10b981\")) }}\n          }\n        ]\n      },\n\n      {\n        \"type\": \"box\",\n        \"layout\": \"baseline\",\n        \"contents\": [\n          { \"type\": \"icon\", \"url\": \"https://cdn-icons-png.flaticon.com/128/1827/1827951.png\", \"size\": \"xs\" },\n          { \"type\": \"text\", \"text\": {{ JSON.stringify(`Time: ${$json.ts}`) }}, \"size\": \"xs\", \"color\": \"#6b7280\", \"margin\": \"sm\", \"wrap\": true }\n        ]\n      }\n    ]\n  },\n\n  \"footer\": {\n    \"type\": \"box\",\n    \"layout\": \"vertical\",\n    \"spacing\": \"sm\",\n    \"contents\": [\n      {\n        \"type\": \"button\",\n        \"style\": \"primary\",\n        \"height\": \"sm\",\n        \"color\": {{ ($json.isHigh ? JSON.stringify(\"#ef4444\") : $json.isLow ? JSON.stringify(\"#0ea5e9\") : JSON.stringify(\"#6366f1\")) }},\n        \"action\": {\n          \"type\": \"uri\",\n          \"label\": \"รายละเอียด\",\n          \"uri\": \"https://www.facebook.com/smfthailand\"\n        }\n      }\n    ]\n  }\n}\n"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        -128
+      ],
+      "id": "cd3acdf8-7804-451d-a6f3-144e003adb10",
+      "name": "LineMessageNode-Flex"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target)').item.json.togroup }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        112,
+        -128
+      ],
+      "id": "c3de788a-2197-415c-bc02-ed7d7f7cb21a",
+      "name": "LineMessaging-SendMessage",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "pTNOUR5YOIYZfi2T",
+          "name": "Line Messaging Auth account#zero2hero#1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtMinute": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1456,
+        192
+      ],
+      "id": "147f55f1-08f1-4734-a32e-f205563bd054",
+      "name": "Daily Summary"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Summarize (target day) — XY-MD02 only (Temp/Hum)\n\nconst TZ_OFFSET_MIN = Number($json.tz_offset_min ?? 420);\nconst toNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };\nconst f1 = (v, d=1) => (v==null ? '—' : Number(v).toFixed(d));\n\nconst msPerMin = 60 * 1000;\nconst tzMs = TZ_OFFSET_MIN * msPerMin;\n\n// helper for local time\nconst PLAIN_LOCAL = /^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$/;\nconst toLocalDateStr = (d) => new Date(d.getTime() + tzMs).toISOString().slice(0,10);\nconst toLocalIso = (d) => new Date(d.getTime() + tzMs).toISOString().replace('T',' ').slice(0,19);\n\n// parse ts robustly\nconst parseTs = (ts) => {\n  if (ts == null) return null;\n  if (typeof ts === 'number') return new Date(ts);\n  if (typeof ts === 'string') {\n    const s = ts.trim();\n    if (PLAIN_LOCAL.test(s)) return new Date(s.replace(' ', 'T'));\n    if (/^\\d{10,13}$/.test(s)) return new Date(Number(s));\n    const d = new Date(s);\n    return isNaN(d.getTime()) ? null : d;\n  }\n  const d = new Date(ts);\n  return isNaN(d.getTime()) ? null : d;\n};\n\n// --- Target day ---\nconst isTest = ($json.test_mode === true) || ($json.test_mode === 'true');\nconst targetDate = ($json.target_date && /^\\d{4}-\\d{2}-\\d{2}$/.test($json.target_date))\n  ? $json.target_date\n  : (() => {\n      const offsetMs = isTest ? 0 : -24*60*60*1000;\n      const baseMs = Date.now() + tzMs + offsetMs;\n      return new Date(baseMs).toISOString().slice(0,10);\n    })();\n\n// --- Input rows ---\nconst rows = items.map(i => i.json || {}).filter(r => r.ts != null);\nconst dayRows = rows\n  .map(r => {\n    const s = String(r.ts).trim();\n    const d = parseTs(r.ts);\n    if (!d) return null;\n    const localDay = PLAIN_LOCAL.test(s) ? s.slice(0,10) : toLocalDateStr(d);\n    return { r, d, ms: d.getTime(), s, localDay };\n  })\n  .filter(x => x && x.localDay === targetDate)\n  .sort((a,b) => a.ms - b.ms);\n\nif (!dayRows.length) {\n  return [{\n    json: {\n      day: targetDate,\n      site: '—',\n      temp_avg: null, temp_min: null, temp_max: null,\n      hum_avg: null, hum_min: null, hum_max: null,\n      rows: 0,\n      high_count: 0, count_low: 0, count_recovery: 0, count_normal: 0,\n      first_ts: null, last_ts: null,\n      text: `🗓️ Daily Summary — ${targetDate}\\n(ไม่มีข้อมูลในวันดังกล่าว)`\n    }\n  }];\n}\n\n// --- Group by site ---\nconst groups = {};\nfor (const { r, d, ms, s } of dayRows) {\n  const site = (r.site || 'UnknownSite').toString();\n  const t = toNum(r.temp);\n  const h = toNum(r.hum);\n\n  if (!groups[site]) {\n    groups[site] = {\n      site, day: targetDate,\n      tSum:0, tCnt:0, tMin:null, tMax:null,\n      hSum:0, hCnt:0, hMin:null, hMax:null,\n      rows:0,\n      high_count:0, count_low:0, count_recovery:0, count_normal:0,\n      firstMs:null, lastMs:null, firstTs:null, lastTs:null,\n      _prevWasHigh:false\n    };\n  }\n\n  const g = groups[site];\n  g.rows++;\n  if (t!==null){g.tSum+=t;g.tCnt++;g.tMin=g.tMin==null?t:Math.min(g.tMin,t);g.tMax=g.tMax==null?t:Math.max(g.tMax,t);}\n  if (h!==null){g.hSum+=h;g.hCnt++;g.hMin=g.hMin==null?h:Math.min(g.hMin,h);g.hMax=g.hMax==null?h:Math.max(g.hMax,h);}\n\n  const sd = String(r.status_detail||'').toLowerCase();\n  const mode = String(r.mode||'').toLowerCase();\n  const isHighFlag = (r.isHigh===true)||(r.isHigh===1)||(String(r.isHigh)==='1');\n  const thr = toNum(r.threshold_temp??r.threshold);\n  const highByTemp = (t!=null&&thr!=null)?(t>thr):false;\n  const cat = sd==='recovery'?'recovery':sd==='high'?'high':(sd==='normal'||sd==='normal_periodic'||sd==='init')?'normal':((isHighFlag||mode==='high'||highByTemp)?'high':'normal');\n\n  if(cat==='high'){g.high_count++;g._prevWasHigh=true;}\n  else if(cat==='recovery'){g.count_recovery++;g.count_normal++;g._prevWasHigh=false;}\n  else{g.count_normal++;if(g._prevWasHigh){g.count_recovery++;g._prevWasHigh=false;}}\n\n  if(g.firstMs==null||ms<g.firstMs){g.firstMs=ms;g.firstTs=PLAIN_LOCAL.test(s)?s:toLocalIso(d);}\n  if(g.lastMs==null||ms>g.lastMs){g.lastMs=ms;g.lastTs=PLAIN_LOCAL.test(s)?s:toLocalIso(d);}\n}\n\n// --- Build outputs ---\nreturn Object.values(groups).map(g=>{\n  const tAvg=g.tCnt?g.tSum/g.tCnt:null;\n  const hAvg=g.hCnt?g.hSum/g.hCnt:null;\n  const text=[\n    `🗓️ Daily Summary — ${g.day}`,\n    `📍 Site: ${g.site}`,\n    `🌡️ Temp: avg ${f1(tAvg)}°C (min ${f1(g.tMin)} / max ${f1(g.tMax)})`,\n    `💧 Hum : avg ${f1(hAvg)}%  (min ${f1(g.hMin)} / max ${f1(g.hMax)})`,\n    `⚠️ High: ${g.high_count} | Recovery: ${g.count_recovery} | Normal: ${g.count_normal} | 🧾 Rows: ${g.rows}`,\n    `🕒 First: ${g.firstTs||'—'} | Last: ${g.lastTs||'—'}`\n  ].join('\\n');\n\n  return {json:{\n    day:g.day,site:g.site,rows:g.rows,\n    temp_avg:tAvg,temp_min:g.tMin,temp_max:g.tMax,\n    hum_avg:hAvg,hum_min:g.hMin,hum_max:g.hMax,\n    high_count:g.high_count,count_low:0,\n    count_recovery:g.count_recovery,count_normal:g.count_normal,\n    first_ts:g.firstTs,last_ts:g.lastTs,text\n  }};\n});"
+      },
+      "id": "ad814ab8-e08b-44bf-90bd-ca03172dbab4",
+      "name": "Summarize (target day)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -784,
+        192
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU",
+          "mode": "list",
+          "cachedResultName": "n8nxy-md02_logger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 113933244,
+          "mode": "list",
+          "cachedResultName": "Daily_summary",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU/edit#gid=113933244"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date": "={{ $json.day }}",
+            "site": "={{$json.site}}",
+            "rows": "={{$json.rows}}",
+            "count_low": "={{$json.high_count}}",
+            "count_recovery": "={{$json.count_recovery}}",
+            "count_normal": "={{$json.count_normal}}",
+            "temp_min": "={{$json.temp_min}}",
+            "temp_avg": "={{$json.temp_max}}",
+            "temp_max": "={{$json.temp_avg}}",
+            "first_ts": "={{$json.first_ts}}",
+            "last_ts": "={{$json.last_ts}}",
+            "hum_min": "={{$json.hum_min}}",
+            "hum_avg": "={{$json.hum_avg}}",
+            "hum_max": "={{$json.hum_max}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "site",
+              "displayName": "site",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rows",
+              "displayName": "rows",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "count_low",
+              "displayName": "count_low",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "count_recovery",
+              "displayName": "count_recovery",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "count_normal",
+              "displayName": "count_normal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "temp_min",
+              "displayName": "temp_min",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "temp_avg",
+              "displayName": "temp_avg",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "temp_max",
+              "displayName": "temp_max",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hum_min",
+              "displayName": "hum_min",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hum_avg",
+              "displayName": "hum_avg",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hum_max",
+              "displayName": "hum_max",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "first_ts",
+              "displayName": "first_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_ts",
+              "displayName": "last_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -336,
+        96
+      ],
+      "id": "90f38613-1c4b-405e-857f-80becb83d4df",
+      "name": "Append Daily_Summary",
+      "credentials": {
+        "googleApi": {
+          "id": "RUv1kTtSucsBEEbA",
+          "name": "Google Service Account account#zero2hero#1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "96d8ce50-fe78-4431-91ec-8a22ffe8dcf1",
+              "name": "test_mode",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "0cb36d68-8bb6-4375-ae31-df620a7c83c4",
+              "name": "target_date",
+              "value": "=",
+              "type": "string"
+            },
+            {
+              "id": "aab208de-439e-4e67-967e-76be0cf69b49",
+              "name": "tz_offset_min",
+              "value": 420,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1008,
+        192
+      ],
+      "id": "408dac5e-7b2b-4ad5-bb2e-e6ac10ca8edd",
+      "name": "Set node"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU",
+          "mode": "list",
+          "cachedResultName": "n8nxy-md02_logger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "xy-md02",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1232,
+        192
+      ],
+      "id": "fc72adff-6146-40ca-b700-7c15abd6f9e9",
+      "name": "Read logs (xymd02)",
+      "credentials": {
+        "googleApi": {
+          "id": "RUv1kTtSucsBEEbA",
+          "name": "Google Service Account account#zero2hero#1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "flex",
+        "altText": "={{ `Daily Summary — ${$json.day || ''} (${ $json.site || '—' })` }}",
+        "flexContent": "={{\n  JSON.stringify({\n    type: 'bubble',\n    size: 'mega',\n    header: {\n      type: 'box',\n      layout: 'horizontal',\n      paddingAll: '12px',\n      contents: [\n        { type: 'text', text: '📊 Daily Summary', weight: 'bold', size: 'md' },\n        { type: 'text', text: ($json.day || ''), size: 'xs', align: 'end', color: '#6B7280' }\n      ]\n    },\n    body: {\n      type: 'box',\n      layout: 'vertical',\n      spacing: 'sm',\n      contents: [\n        { type: 'text', text: `📍 ${$json.site || '—'}`, weight: 'bold', size: 'md', wrap: true },\n        { type: 'separator', margin: 'sm' },\n        { type: 'text', text: ($json.summary_text || ''), wrap: true, size: 'sm' }\n      ]\n    },\n    footer: {\n      type: 'box',\n      layout: 'horizontal',\n      spacing: 'md',\n      paddingAll: '10px',\n      contents: [\n        {\n          type: 'button',\n          style: 'link',\n          action: {\n            type: 'uri',\n            label: '📄 Open Sheet',\n            uri: 'https://docs.google.com/spreadsheets/d/1bBdHKma7eqZtVHaBk31GKj4HvZ7zyv3nDPyuPWBDWQU/edit?usp=sharing'\n          }\n        },\n        {\n          type: 'button',\n          style: 'link',\n          action: {\n            type: 'uri',\n            label: '📘 FB: Smfthailand',\n            uri: 'https://www.facebook.com/smfthailand'\n          }\n        }\n      ]\n    }\n  })\n}}\n"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        288
+      ],
+      "id": "ee51313d-8014-48f1-bba2-426a4d03a010",
+      "name": "LineMessageNode-Flex-Daily-Summary"
+    },
+    {
+      "parameters": {
+        "message": "={{ [$json.message] }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $(\"Set (LINE Target)-Daily-Summary\").item.json.togroup }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        288
+      ],
+      "id": "d44607d8-ccae-4989-b33c-09ff7e254bce",
+      "name": "LineMessaging-SendMessage-Daily-Summary",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "pTNOUR5YOIYZfi2T",
+          "name": "Line Messaging Auth account#zero2hero#1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "togroup",
+              "value": "=C718435f5bb92c629c17e955267f9eda4"
+            },
+            {
+              "name": "toType",
+              "value": "user"
+            },
+            {
+              "name": "site",
+              "value": "={{ $json.site }}"
+            },
+            {
+              "name": "day",
+              "value": "={{ $json.day }}"
+            },
+            {
+              "name": "summary_text",
+              "value": "={{ $json.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target)-Daily-Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        288
+      ],
+      "id": "27aeb06c-6a7e-4003-8d2a-0c4ecf90d6a8",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "272c68ad-3a36-45a5-81e2-c5dd91442727",
+              "leftValue": "={{ $json.rows > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -560,
+        96
+      ],
+      "id": "bd8e1451-858f-42cb-83eb-eee22d2d31fe",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.summary_text || \"ไม่มีข้อมูลสรุป\" }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -1456,
+        512
+      ],
+      "id": "7d9d8acb-bd5a-4c79-94a8-1e4f40f7aba9",
+      "name": "LineMessageNode-Text-Daily-Summary1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "shouldNotify=true": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MQTT Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set: Site Name/Threshold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "shouldLog=true": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate: 1m (high) / 60m (normal)": {
+      "main": [
+        [
+          {
+            "node": "shouldLog=true",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "shouldNotify=true",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Site Name/Threshold": {
+      "main": [
+        [
+          {
+            "node": "Parse xymd02(normalize)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse xymd02(normalize)": {
+      "main": [
+        [
+          {
+            "node": "Gate: 1m (high) / 60m (normal)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Flex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Flex": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Summary": {
+      "main": [
+        [
+          {
+            "node": "Read logs (xymd02)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize (target day)": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target)-Daily-Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set node": {
+      "main": [
+        [
+          {
+            "node": "Summarize (target day)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read logs (xymd02)": {
+      "main": [
+        [
+          {
+            "node": "Set node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Flex-Daily-Summary": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-Daily-Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target)-Daily-Summary": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Flex-Daily-Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Append Daily_Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "46259f39-b1f5-4def-8aff-dd3b3a547b60",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ae77891e61682ce507d6ded849cca0156c91ca717c15eeed76eb0533f2ae6f80"
+  },
+  "id": "mK8LvFJgWTUv1hGy",
+  "tags": []
+}
