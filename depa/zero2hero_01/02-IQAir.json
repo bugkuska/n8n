@@ -1,0 +1,137 @@
+{
+  "name": "02-IQAir",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "8617f5a1-e3af-445b-8f6f-1d6a9be63175",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9
+            }
+          ]
+        }
+      },
+      "id": "453dbcac-1f05-471c-813c-45761aff7955",
+      "name": "Cron (09:00 daily)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.airvisual.com/v2/city",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "6d5e2ec5-5689-4d8c-8409-3eb3196c9d51"
+            },
+            {
+              "name": "city",
+              "value": "Maha Sarakham"
+            },
+            {
+              "name": "state",
+              "value": "Maha Sarakham"
+            },
+            {
+              "name": "country",
+              "value": "Thailand"
+            }
+          ]
+        },
+        "options": {
+          "response": {}
+        }
+      },
+      "id": "175eb4ce-ccae-4428-99a9-eefac90daee3",
+      "name": "HTTP: IQAir city=Mahasarakham",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        352,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Function v1: Same formatter as nearest_city, works for /city too\nconst d = $json.data || {};\nconst cur = (d.current || {});\nconst pol = (cur.pollution || {});\nconst wth = (cur.weather || {});\n\nconst city = d.city || '-';\nconst state = d.state || '-';\nconst country = d.country || '-';\n\nconst aqius = Number(pol.aqius ?? NaN);\nconst main  = pol.mainus || '';\nconst ts    = pol.ts || wth.ts || '';\n\nconst mapMain = { p2: 'PM2.5', p1: 'PM10', o3: 'O₃', no2: 'NO₂', so2: 'SO₂', co: 'CO' };\nconst mainLabel = mapMain[main] || main || '-';\n\nlet cat = 'N/A';\nif (!Number.isNaN(aqius)) {\n  if (aqius <= 50) cat = '✅ ดี (0–50)';\n  else if (aqius <= 100) cat = '🟡 ปานกลาง (51–100)';\n  else if (aqius <= 150) cat = '🟠 มีผลกระทบต่อผู้ไวต่อมลพิษ (101–150)';\n  else if (aqius <= 200) cat = '🔴 ไม่ดี (151–200)';\n  else if (aqius <= 300) cat = '🟣 แย่มาก (201–300)';\n  else cat = '🛑 อันตราย (>300)';\n}\n\nfunction esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }\n\nconst lines = [];\nlines.push('🌏 IQAir — สรุปคุณภาพอากาศ');\nlines.push(`พื้นที่: ${esc(city)}, ${esc(state)}, ${esc(country)}`);\nif (!Number.isNaN(aqius)) lines.push(`US AQI: ${aqius} (${esc(cat)})`);\nlines.push(`มลพิษหลัก: ${esc(mainLabel)}`);\nif (ts) lines.push(`เวลาอัปเดต: ${esc(ts)}`);\n\nif (Object.keys(wth).length) {\n  const tp=wth.tp, hu=wth.hu, ws=wth.ws, pr=wth.pr;\n  const parts=[];\n  if (tp!==undefined) parts.push(`อุณหภูมิ: ${esc(tp)}°C`);\n  if (hu!==undefined) parts.push(`ความชื้น: ${esc(hu)}%`);\n  if (ws!==undefined) parts.push(`ลม: ${esc(ws)} m/s`);\n  if (pr!==undefined) parts.push(`ความกดอากาศ: ${esc(pr)} hPa`);\n  if (parts.length) lines.push(parts.join(' • '));\n}\n\nlines.push('');\nlines.push('ปล. ค่า US AQI เป็นดัชนีรวม โดยมลพิษหลักมักเป็น PM2.5 (p2)');\n\nconst text_plain = lines.join('\\n');\nconst text_html = text_plain; // HTML mode, no <br>\nreturn [{ text: text_plain, text_html, aqius }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        80
+      ],
+      "id": "44f0872e-f61c-44ca-9b56-ca935f473bba",
+      "name": "Code-Build-Text"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP: IQAir city=Mahasarakham",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cron (09:00 daily)": {
+      "main": [
+        [
+          {
+            "node": "HTTP: IQAir city=Mahasarakham",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: IQAir city=Mahasarakham": {
+      "main": [
+        [
+          {
+            "node": "Code-Build-Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code-Build-Text": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "665c1f92-9425-48e4-b3f2-33fca132b51c",
+  "meta": {
+    "instanceId": "6e8bd4e6dcfe2d257f6d9648f4efaf76882daef04e1402d554d9aae9132bba97"
+  },
+  "id": "r90hqC3Le5J8_RRZ9bPu9",
+  "tags": []
+}

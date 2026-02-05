@@ -1,0 +1,509 @@
+{
+  "name": "04-IQAir-Google-sheet-Line",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "f261a3c9-797e-460c-a41b-eabbc029620f",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9
+            }
+          ]
+        }
+      },
+      "id": "a115d99c-e6b6-4766-862f-aa616bfc25ff",
+      "name": "Cron (09:00 daily)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.airvisual.com/v2/city",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "6d5e2ec5-5689-4d8c-8409-3eb3196c9d51"
+            },
+            {
+              "name": "city",
+              "value": "Maha Sarakham"
+            },
+            {
+              "name": "state",
+              "value": "Maha Sarakham"
+            },
+            {
+              "name": "country",
+              "value": "Thailand"
+            }
+          ]
+        },
+        "options": {
+          "response": {}
+        }
+      },
+      "id": "de565d88-5575-40a2-85ac-563edb06dcd7",
+      "name": "HTTP: IQAir city=Mahasarakham",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -112,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Function v1: Same formatter as nearest_city, works for /city too\nconst d = $json.data || {};\nconst cur = (d.current || {});\nconst pol = (cur.pollution || {});\nconst wth = (cur.weather || {});\n\nconst city = d.city || '-';\nconst state = d.state || '-';\nconst country = d.country || '-';\n\nconst aqius = Number(pol.aqius ?? NaN);\nconst main  = pol.mainus || '';\n// ให้ ts มีค่าเสมอ: ใช้ของ API ก่อน ถ้าไม่มี ใช้เวลาปัจจุบันของ n8n\nconst ts    = pol.ts || wth.ts || $now.toISO();\n\nconst mapMain = { p2: 'PM2.5', p1: 'PM10', o3: 'O₃', no2: 'NO₂', so2: 'SO₂', co: 'CO' };\nconst mainLabel = mapMain[main] || main || '-';\n\nlet cat = 'N/A';\nif (!Number.isNaN(aqius)) {\n  if (aqius <= 50) cat = '✅ ดี (0–50)';\n  else if (aqius <= 100) cat = '🟡 ปานกลาง (51–100)';\n  else if (aqius <= 150) cat = '🟠 มีผลกระทบต่อผู้ไวต่อมลพิษ (101–150)';\n  else if (aqius <= 200) cat = '🔴 ไม่ดี (151–200)';\n  else if (aqius <= 300) cat = '🟣 แย่มาก (201–300)';\n  else cat = '🛑 อันตราย (>300)';\n}\n\nfunction esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }\n\nconst lines = [];\nlines.push('🌏 IQAir — สรุปคุณภาพอากาศ');\nlines.push(`พื้นที่: ${esc(city)}, ${esc(state)}, ${esc(country)}`);\nif (!Number.isNaN(aqius)) lines.push(`US AQI: ${aqius} (${esc(cat)})`);\nlines.push(`มลพิษหลัก: ${esc(mainLabel)}`);\nif (ts) lines.push(`เวลาอัปเดต: ${esc(ts)}`);\n\nlet temp_c = null;\nlet humidity = null;\nlet wind_ms = null;\nlet pressure_hpa = null;\n\nif (Object.keys(wth).length) {\n  const tp=wth.tp, hu=wth.hu, ws=wth.ws, pr=wth.pr;\n  const parts=[];\n  if (tp!==undefined) { temp_c = tp; parts.push(`อุณหภูมิ: ${esc(tp)}°C`); }\n  if (hu!==undefined) { humidity = hu; parts.push(`ความชื้น: ${esc(hu)}%`); }\n  if (ws!==undefined) { wind_ms = ws; parts.push(`ลม: ${esc(ws)} m/s`); }\n  if (pr!==undefined) { pressure_hpa = pr; parts.push(`ความกดอากาศ: ${esc(pr)} hPa`); }\n  if (parts.length) lines.push(parts.join(' • '));\n}\n\nlines.push('');\nlines.push('ปล. ค่า US AQI เป็นดัชนีรวม โดยมลพิษหลักมักเป็น PM2.5 (p2)');\n\nconst text_plain = lines.join('\\n');\nconst text_html = text_plain; // HTML mode, no <br>\n\n// ✅ Return ให้ครบตามคอลัมน์ Google Sheet\nreturn [{\n  ts,\n  city,\n  state,\n  country,\n  aqius: Number.isNaN(aqius) ? null : aqius,\n  mainus: main || null,\n  temp_c,\n  humidity,\n  wind_ms,\n  pressure_hpa,\n  text: text_plain,\n  text_html\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        112
+      ],
+      "id": "9dd9e791-dc63-4a2d-af84-2960fa9987b4",
+      "name": "Code-Build-Text"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b5dfd9ff-99f3-478a-a5fd-38df5f1be878",
+              "name": "ts",
+              "value": "={{$json.ts ?? $now.toISO()}}",
+              "type": "string"
+            },
+            {
+              "id": "ddce1848-e9d3-4e88-90df-21d1ad5d67bb",
+              "name": "city",
+              "value": "={{$json.city}}",
+              "type": "string"
+            },
+            {
+              "id": "757317c9-7945-491e-a050-e632a889ba33",
+              "name": "state",
+              "value": "={{$json.state}}",
+              "type": "string"
+            },
+            {
+              "id": "c8659932-8c8a-4a9e-bc39-c882ba305bff",
+              "name": "country",
+              "value": "={{$json.country}}",
+              "type": "string"
+            },
+            {
+              "id": "c1c5293c-c044-4ef6-a5a0-6d0907fdbd73",
+              "name": "aqius",
+              "value": "={{$json.aqius}}",
+              "type": "string"
+            },
+            {
+              "id": "243bbaff-61f9-4615-883a-abcac5f339ac",
+              "name": "temp_c",
+              "value": "={{$json.temp_c}}",
+              "type": "string"
+            },
+            {
+              "id": "14809084-f38a-4032-a439-84459d12490c",
+              "name": "humidity",
+              "value": "={{$json.humidity}}",
+              "type": "string"
+            },
+            {
+              "id": "01e6917c-25d3-43b9-b3e7-e8f61ff875d6",
+              "name": "wind_ms",
+              "value": "={{$json.wind_ms}}",
+              "type": "string"
+            },
+            {
+              "id": "7d7f3047-1139-4f82-99af-e41513e4835c",
+              "name": "pressure_hpa",
+              "value": "={{$json.pressure_hpa}}",
+              "type": "string"
+            },
+            {
+              "id": "0552f1d3-140e-4471-ab71-fd337a8298f6",
+              "name": "text",
+              "value": "={{$json.text}}",
+              "type": "string"
+            },
+            {
+              "id": "ed6121bf-f8fa-4916-8be0-09b62d7de819",
+              "name": "=mainus",
+              "value": "={{$json.mainus}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        160,
+        112
+      ],
+      "id": "14667209-0b2b-4fa6-a040-b04af15271cb",
+      "name": "SET | Prepare Data for Sheet"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4",
+          "mode": "list",
+          "cachedResultName": "n8n_depa_01",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "weather_logger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ts": "={{$json.ts}}",
+            "city": "={{$json.city}}",
+            "state": "={{$json.state}}",
+            "country": "={{$json.country}}",
+            "aqius": "={{$json.aqius}}",
+            "temp_c": "={{$json.temp_c}}",
+            "humidity": "={{$json.humidity}}",
+            "wind_ms": "={{$json.wind_ms}}",
+            "pressure_hpa": "={{$json.pressure_hpa}}",
+            "text": "={{$json.text}}",
+            "mainus": "={{$json.mainus}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "city",
+              "displayName": "city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "state",
+              "displayName": "state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "country",
+              "displayName": "country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "aqius",
+              "displayName": "aqius",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "mainus",
+              "displayName": "mainus",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "temp_c",
+              "displayName": "temp_c",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "humidity",
+              "displayName": "humidity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "wind_ms",
+              "displayName": "wind_ms",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pressure_hpa",
+              "displayName": "pressure_hpa",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        320,
+        -160
+      ],
+      "id": "baff22ef-b925-49fe-8d37-6c6bb3f66ef0",
+      "name": "GS | Append Data Row",
+      "credentials": {
+        "googleApi": {
+          "id": "R0AwtpKYxuM7gzKi",
+          "name": "Google Sheets account-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target)').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        912,
+        128
+      ],
+      "id": "fa3fdaff-f5a0-4474-983b-1b82dfe845bd",
+      "name": "LineMessaging-SendMessage",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "1a7XRqAPElUVvhoP",
+          "name": "Line Messaging Auth account-n8n-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.line_message }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        576,
+        -144
+      ],
+      "id": "fe810743-9b78-4472-b151-0b45dce6c452",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.line_message }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        656,
+        128
+      ],
+      "id": "14e2f195-893a-4576-bd8a-adb67892af90",
+      "name": "LineMessageNode"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ดึงค่าจาก input ของ Workflow\nconst {\n  ts,\n  city,\n  state,\n  country,\n  aqius,\n  mainus,\n  temp_c,\n  humidity,\n  wind_ms,\n  pressure_hpa\n} = $json;\n\n// ฟังก์ชันกันค่า null / undefined\nconst safe = (v) => (v === null || v === undefined ? '-' : v);\n\n// แปลงเวลาให้อ่านง่าย (รูปแบบไทย)\nconst time = ts\n  ? new Date(ts).toLocaleString('th-TH', { hour12: false })\n  : '-';\n\n// ประเมินระดับคุณภาพอากาศ\nlet level = 'ไม่ทราบ';\nif (typeof aqius === 'number') {\n  if (aqius <= 50) level = '🟢 ดี';\n  else if (aqius <= 100) level = '🟡 ปานกลาง';\n  else if (aqius <= 150) level = '🟠 มีผลกระทบต่อสุขภาพ';\n  else if (aqius <= 200) level = '🔴 ไม่ดี';\n  else level = '🟣 แย่มาก';\n}\n\n// สร้างข้อความสำหรับ LINE\nconst message = `\n🌏 แจ้งเตือนคุณภาพอากาศ\n📍 พื้นที่: ${safe(city)}, ${safe(state)}\n🕒 เวลา: ${time}\n\n📊 AQI: ${safe(aqius)} (${level})\n🌫 มลพิษหลัก: ${safe(mainus)}\n\n🌡 อุณหภูมิ: ${safe(temp_c)} °C\n💧 ความชื้น: ${safe(humidity)} %\n💨 ลม: ${safe(wind_ms)} m/s\n🔽 ความกดอากาศ: ${safe(pressure_hpa)} hPa\n`.trim();\n\n// ส่งออกให้ node ถัดไป\nreturn [\n  {\n    line_message: message\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        112
+      ],
+      "id": "bd664d56-f1a5-4288-826e-e0f5b00f1716",
+      "name": "Code | Build LINE Message"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP: IQAir city=Mahasarakham",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cron (09:00 daily)": {
+      "main": [
+        [
+          {
+            "node": "HTTP: IQAir city=Mahasarakham",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: IQAir city=Mahasarakham": {
+      "main": [
+        [
+          {
+            "node": "Code-Build-Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code-Build-Text": {
+      "main": [
+        [
+          {
+            "node": "SET | Prepare Data for Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SET | Prepare Data for Sheet": {
+      "main": [
+        [
+          {
+            "node": "GS | Append Data Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code | Build LINE Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS | Append Data Row": {
+      "main": [
+        []
+      ]
+    },
+    "Code | Build LINE Message": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "baa2a8fc-ea5d-4f8b-8b6a-a508057feccd",
+  "meta": {
+    "instanceId": "6e8bd4e6dcfe2d257f6d9648f4efaf76882daef04e1402d554d9aae9132bba97"
+  },
+  "id": "9yzNT6h5NTswXKW2LqQXV",
+  "tags": []
+}

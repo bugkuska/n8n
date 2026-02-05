@@ -1,0 +1,99 @@
+{
+  "name": "01-Webhook-Hello.json",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "webhook/hello",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -256,
+        -48
+      ],
+      "id": "38e9711d-9dd4-4bca-8cf4-89d1827eb1c4",
+      "name": "Webhook",
+      "webhookId": "7b259212-148a-429c-ae8c-0461f774e5d9"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a39221cf-77f7-43b4-a91f-07fe6260c9ca",
+              "name": "message",
+              "value": "Hello world!!",
+              "type": "string"
+            },
+            {
+              "id": "022176ca-4d3f-4ce7-8848-2a97ee13a178",
+              "name": "timestamp",
+              "value": "={{$now}} ",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -48,
+        -48
+      ],
+      "id": "c2725dd3-55fd-4812-b64a-b6f002d72714",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        160,
+        -48
+      ],
+      "id": "6ff1e974-d742-4394-9c98-356b8eb98ca2",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "b8b8a9f3-feb6-4bd2-a6a9-f3819192759e",
+  "meta": {
+    "instanceId": "6e8bd4e6dcfe2d257f6d9648f4efaf76882daef04e1402d554d9aae9132bba97"
+  },
+  "id": "S-GHc3hWB0nMswktVWj09",
+  "tags": []
+}
