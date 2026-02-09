@@ -1,0 +1,1079 @@
+{
+  "name": "05-LINE-Chatbot-Workflow-FAQ-Fuzzy-Match",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "// event ตัวแรกจาก LINE Webhook\nconst e = $json.body?.events?.[0] || {};\n\n// ดึงข้อความ\nconst text = e?.message?.text || '';\n\n// normalize สำหรับ fuzzy\nconst key = text.trim().toLowerCase();\n\n// source id\nconst userId = e?.source?.userId || null;\nconst groupId = e?.source?.groupId || null;\nconst roomId = e?.source?.roomId || null;\n\n// chatId ใช้เป็น target หลัก (เลือกตามที่มี)\nconst chatId = userId || groupId || roomId || null;\n\n// replyToken (สำคัญมาก ถ้าจะ reply กลับจาก webhook)\nconst replyToken = e?.replyToken || null;\n\n// ชนิดแหล่งที่มา\nconst sourceType = e?.source?.type || null;\n\nreturn [\n  {\n    json: {\n      text,\n      key,\n      chatId,\n      replyToken,\n      sourceType,\n      userId,\n      groupId,\n      roomId\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1312,
+        -16
+      ],
+      "name": "Normalize Text",
+      "id": "1a2694d7-6f03-4eab-895d-c994a10d1431",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// รับค่าจาก Normalize Text\nconst text = ($json.text || '').toString().trim();\nconst key  = ($json.key  || '').toString().trim().toLowerCase();\n\n// คำสั่งที่ถือว่าเป็น help/menu\nconst helpWords = new Set([\n  'help', '/help', 'เมนู', 'menu',\n  'ช่วย', 'ช่วยด้วย', 'ขอความช่วยเหลือ',\n  'หัวข้อ', 'หัวข้อทั้งหมด', 'รายการ', 'คำสั่ง', 'commands',\n  'ถามอะไรได้บ้าง', 'ใช้งานยังไง', 'วิธีใช้'\n]);\n\n// ถ้าพิมพ์แค่คำสั่งตรงๆ หรือมี /help\nconst isHelp =\n  helpWords.has(key) ||\n  key.startsWith('/help') ||\n  key === '?' ||\n  key === 'h';\n\n// ส่งต่อ โดยคง field เดิมทั้งหมด\nreturn [\n  {\n    json: {\n      ...$json,\n      isHelp,\n      cmd: isHelp ? 'help' : null,\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        -16
+      ],
+      "name": "Detect /help",
+      "id": "374348b6-2104-456d-81e5-0dc6e19d5064"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4",
+          "mode": "list",
+          "cachedResultName": "n8n_depa_01",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2066802580,
+          "mode": "list",
+          "cachedResultName": "faq_kb",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4/edit#gid=2066802580"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -768,
+        -256
+      ],
+      "name": "Read Top Topics",
+      "id": "f5b367d6-343c-4f9e-b8c2-da6c78a8a153",
+      "credentials": {
+        "googleApi": {
+          "id": "R0AwtpKYxuM7gzKi",
+          "name": "Google Sheets account-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const items = $items();                 // top topics 6 rows\nconst ctx = $input.first().json;        // ดึง context จาก input ของ node นี้ (ทนสุด)\n\nconst lines = items.map((it, i) => {\n  const question = String(it.json.question || it.json.keyword || '').trim();\n  const tag = String(it.json.tags || '').trim();\n  const tagTxt = tag ? ` (${tag})` : '';\n  return `${i + 1} ${question}${tagTxt}`;\n});\n\nconst msg = [\n  '📌 เมนูช่วยเหลือ',\n  'พิมพ์คำถามได้ตามหัวข้อด้านล่าง 👇',\n  '',\n  ...lines,\n  '',\n  'ℹ️ พิมพ์ \"help\" เพื่อดูเมนูอีกครั้ง',\n].join('\\n');\n\nreturn [{ json: { ...ctx, helpText: msg } }];\n"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -496,
+        -256
+      ],
+      "name": "Format /help List",
+      "id": "655fb3fc-6f16-48a4-a2ac-72a9a965edcb"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4d0ea538-6199-4351-8e20-8ea1d1b25f5a",
+              "leftValue": "={{$json.isHelp}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -912,
+        -16
+      ],
+      "id": "afec0f8b-f7cb-4048-809e-7c5039b259f1",
+      "name": "IF: isHelp"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "faq_kb",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1296,
+        -240
+      ],
+      "id": "867a8e0b-424b-4faa-b907-866f531a5818",
+      "name": "Webhook",
+      "webhookId": "0ca84b98-9ddd-4695-a8d8-5facf4039b21"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ดึงข้อมูลจาก Fuzzy Match\nconst answer = ($json.answer || '').toString().trim();\nconst q = ($json.matched_question || $json.key || '').toString().trim();\nconst tag = ($json.tags || '').toString().trim();\n\n// กันกรณีคำตอบว่าง (แม้ matched=true)\nconst safeAnswer = answer || 'ขออภัยครับ พบคำถามที่ใกล้เคียงแต่ยังไม่มีคำตอบในฐานความรู้';\n\n// ข้อความที่จะส่งกลับ\nconst lineText = [\n  `✅ คำถาม: ${q || '-'}`,\n  '',\n  safeAnswer,\n  tag ? `\\n🏷️ หมวด: ${tag}` : ''\n].join('\\n').trim();\n\n// ส่งต่อให้ node ถัดไป (พก field เดิมทั้งหมดไว้)\nreturn [\n  {\n    json: {\n      ...$json,\n      lineText,\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        -16
+      ],
+      "id": "ca6048af-56f4-4717-aa74-67c4f0979ef4",
+      "name": "Code | Build LINE Message (True)"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.line_message }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-true)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -16
+      ],
+      "id": "b4c7f7cd-3a48-4d09-9252-210f2477a7c9",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.lineText }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        752,
+        -16
+      ],
+      "id": "41212643-6fd2-4304-87b0-1c9057eab4c8",
+      "name": "LineMessageNode-True"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target-true)').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        -16
+      ],
+      "id": "e6ea7bed-e4b9-4aed-b781-56fc311f0c4a",
+      "name": "LineMessaging-SendMessage-True",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "1a7XRqAPElUVvhoP",
+          "name": "Line Messaging Auth account-n8n-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1) context เดิมจาก IF: isHelp (มี chatId/replyToken)\nconst ctx = $items('IF: isHelp')?.[0]?.json ?? {};\n\n// 2) helpText ที่ถูกสร้างจาก Format /help List\nconst helpText = String($json.helpText ?? '');\n\nconst lineText = helpText\n  .replace(/\\\\n/g, '\\n')\n  .replace(/\\r\\n/g, '\\n');\n\nreturn [\n  {\n    json: {\n      ...ctx,         // ✅ เอา chatId/replyToken กลับมา\n      ...$json,        // ข้อมูล helpText/อื่นๆ\n      lineText,        // ✅ ข้อความพร้อมส่ง LINE\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        -256
+      ],
+      "id": "b1bc7028-96c3-4375-a6dc-4b9f9e972ee3",
+      "name": "Code | Build LINE Message-Help"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-Help)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -256
+      ],
+      "id": "70e51ca7-48ac-47b9-8737-9c2cfdd9393d",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        272,
+        -256
+      ],
+      "id": "8a4673d5-8eca-4784-a1f4-dd3af1f1f4a4",
+      "name": "LineMessageNode-Help"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target-Help)').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        512,
+        -256
+      ],
+      "id": "6a6b03ec-9f9b-418e-aa5a-71a48eda108c",
+      "name": "LineMessaging-SendMessage-Help",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "1a7XRqAPElUVvhoP",
+          "name": "Line Messaging Auth account-n8n-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// รับข้อความจากหลาย field เผื่อบาง flow ใช้ key/input\nconst raw = ($json.text ?? $json.key ?? $json.input ?? $json.message ?? '').toString();\n\n// normalize\nconst s = raw.trim().toLowerCase();\n\n// จับเมนู 1–6 แบบ \"เลขเดี่ยว\" (ไม่เอา 10, 21 ฯลฯ)\n// รองรับ: \"1\", \"เมนู 1\", \"ข้อ 1\", \"1 ขอรหัส\", \"เลือก 1\"\nlet pick = null;\n\n// regex: ต้องเป็นเลข 1-6 ที่ไม่ติดกับเลขอื่น (ใช้ negative lookahead/lookbehind)\nconst m = s.match(/(?:^|[^\\d])([1-6])(?!\\d)/);\nif (m) pick = Number(m[1]);\n\nreturn [{\n  ...$json,\n  pick,\n  isMenuPick: Number.isInteger(pick) && pick >= 1 && pick <= 6,\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        0
+      ],
+      "id": "f31bb716-7e18-47c2-b7a7-9d573609b752",
+      "name": "Detect Menu Pick"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fedd73ac-6afb-45b7-80f1-7053fefa4f9b",
+              "leftValue": "={{$json.isMenuPick}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -384,
+        0
+      ],
+      "id": "56ea2b96-4a86-491d-bd20-45431db9b090",
+      "name": "IF isMenuPick"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4",
+          "mode": "list",
+          "cachedResultName": "n8n_depa_01",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2066802580,
+          "mode": "list",
+          "cachedResultName": "faq_kb",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4/edit#gid=2066802580"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "menu_no",
+              "lookupValue": "={{$json.pick}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -96,
+        -16
+      ],
+      "id": "3de25da3-070c-44b4-9136-d7360eec6087",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleApi": {
+          "id": "R0AwtpKYxuM7gzKi",
+          "name": "Google Sheets account-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4",
+          "mode": "list",
+          "cachedResultName": "n8n_depa_01",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 232357253,
+          "mode": "list",
+          "cachedResultName": "unknown_questions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4/edit#gid=232357253"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ts": "={{ $now }}",
+            "chatId": "={{$json.chatId}}",
+            "text": "={{ $json.text }}",
+            "key": "={{ $json.key }}",
+            "score": "={{ $json.score }}"
+          },
+          "matchingColumns": [
+            "message"
+          ],
+          "schema": [
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "chatId",
+              "displayName": "chatId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "key",
+              "displayName": "key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        896,
+        624
+      ],
+      "name": "Log Unknown",
+      "id": "ae8a9c7c-5420-47da-a313-0f102e4d5858",
+      "credentials": {
+        "googleApi": {
+          "id": "R0AwtpKYxuM7gzKi",
+          "name": "Google Sheets account-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3d12cf16-09c2-4d12-b324-8b9b2b992087",
+              "leftValue": "={{$json.isHelp}}",
+              "rightValue": "help",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "6f7633c3-99e2-44ff-a7fa-8919f5b6d71c",
+              "leftValue": "={{$json.isMenuPick}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "db12c603-9f86-4c53-943b-aa35ad3d8473",
+              "leftValue": "={{$json.matched}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        592,
+        640
+      ],
+      "id": "02bf2b81-ed86-4513-ac6f-d44ab3d22a48",
+      "name": "IF: Should Log Unknown"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1cd66ddf-08e3-4e97-a977-e2eb51df3dc2",
+              "leftValue": "={{$json.matched}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        16,
+        240
+      ],
+      "name": "Found?1",
+      "id": "ce46fe67-214b-451e-a53f-6424d2c033b2"
+    },
+    {
+      "parameters": {
+        "functionCode": "// ----- INPUT -----\n// kb rows มาจาก Read All FAQ (items หลายแถว)\nconst kbItems = $items(\"Read All FAQ\");\n\n// ข้อความผู้ใช้มาจาก Normalize Text (1 item)\nconst q = $items(\"Normalize Text\")[0]?.json || {};\nconst key = (q.key || \"\").toString().trim().toLowerCase();\nconst text = (q.text || \"\").toString();\nconst input = (q.text || q.key || \"\").toString().trim().toLowerCase();\n\nconst chatId = q.chatId || null;\nconst replyToken = q.replyToken || null;\n\n// ----- helpers -----\nfunction norm(s) {\n  return (s || \"\").toString().trim().toLowerCase();\n}\n\nfunction scoreRow(row, input) {\n  const keyword = norm(row.keyword);\n  const aliases = norm(row.aliases);\n  const question = norm(row.question);\n\n  if (!input) return 0;\n\n  // 1) keyword อยู่ในประโยค (แรงสุด)\n  if (keyword && input.includes(keyword)) return 100;\n\n  // 2) alias hit (aliases แยกด้วย ,)\n  if (aliases) {\n    const parts = aliases.split(\",\").map(s => s.trim()).filter(Boolean);\n    for (const p of parts) {\n      if (p && input.includes(p)) return 90;\n    }\n  }\n\n  // 3) question contains (เผื่อพิมพ์คล้ายคำถาม)\n  if (question && (question.includes(input) || input.includes(question))) return 80;\n\n  // 4) token overlap (ไทย/อังกฤษแบบง่าย)\n  const tokens = s => norm(s).split(/[\\s,]+/).filter(Boolean);\n  const A = new Set(tokens(input));\n  const B = new Set(tokens(`${keyword} ${aliases} ${question}`));\n  let common = 0;\n  for (const t of A) if (B.has(t)) common++;\n  const overlap = common / Math.max(A.size, 1);\n\n  return Math.round(overlap * 70); // 0..70\n}\n\n// ----- find best -----\nlet best = null;\nlet bestScore = 0;\n\nfor (const it of kbItems) {\n  const row = it.json || {};\n  const s = scoreRow(row, input);\n  if (s > bestScore) {\n    bestScore = s;\n    best = row;\n  }\n}\n\n// threshold ปรับได้\nconst threshold = 75;\nconst matched = bestScore >= threshold;\n\nreturn [\n  {\n    json: {\n      text,\n      key,\n      input,\n      chatId,\n      replyToken,\n      matched,\n      score: bestScore,\n      matched_keyword: matched ? best?.keyword : null,\n      matched_question: matched ? best?.question : null,\n      answer: matched ? best?.answer : null,\n      tags: matched ? best?.tags : null,\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        240
+      ],
+      "name": "Fuzzy Match",
+      "id": "b7f4ac37-366e-4d58-988a-8eff22dcff60"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.line_message }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-fuzzy)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        528,
+        224
+      ],
+      "id": "1377f921-4a5a-4b77-a801-1049dd40aa3b",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// ดึงข้อมูลจาก Fuzzy Match\nconst answer = ($json.answer || '').toString().trim();\nconst q = ($json.matched_question || $json.key || '').toString().trim();\nconst tag = ($json.tags || '').toString().trim();\n\n// กันกรณีคำตอบว่าง (แม้ matched=true)\nconst safeAnswer = answer || 'ขออภัยครับ พบคำถามที่ใกล้เคียงแต่ยังไม่มีคำตอบในฐานความรู้';\n\n// ข้อความที่จะส่งกลับ\nconst lineText = [\n  `✅ คำถาม: ${q || '-'}`,\n  '',\n  safeAnswer,\n  tag ? `\\n🏷️ หมวด: ${tag}` : ''\n].join('\\n').trim();\n\n// ส่งต่อให้ node ถัดไป (พก field เดิมทั้งหมดไว้)\nreturn [\n  {\n    json: {\n      ...$json,\n      lineText,\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        224
+      ],
+      "id": "a9ecb359-54d0-41a2-9d8a-8bb41cf48733",
+      "name": "Code | Build LINE Message (fuzzy)"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4",
+          "mode": "list",
+          "cachedResultName": "n8n_depa_01",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2066802580,
+          "mode": "list",
+          "cachedResultName": "faq_kb",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nrCfhypwebJIzZljNSI550u3xevq_d5HyqU-wNpZ7l4/edit#gid=2066802580"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -400,
+        240
+      ],
+      "name": "Read All FAQ",
+      "id": "09a1bff4-f113-4166-9720-670df7e6fdd5",
+      "credentials": {
+        "googleApi": {
+          "id": "R0AwtpKYxuM7gzKi",
+          "name": "Google Sheets account-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.lineText }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        784,
+        224
+      ],
+      "id": "7fb0bc0c-4a74-417b-b22f-1f7832cf27db",
+      "name": "LineMessageNode-Fuzzy"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target-fuzzy)').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        224
+      ],
+      "id": "fc6a4796-b371-4a45-999e-a6b526e5211e",
+      "name": "LineMessaging-SendMessage-Fuzzy",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "1a7XRqAPElUVvhoP",
+          "name": "Line Messaging Auth account-n8n-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ข้อมูลจาก Fuzzy Match (ฝั่ง false)\nconst text = ($json.text || '').toString().trim();\nconst key = ($json.key || '').toString().trim();\nconst score = Number($json.score ?? 0);\n\nconst tagHint = '💡 พิมพ์ \"help\" เพื่อดูหัวข้อที่ถามได้';\nconst msg = [\n  '❓ ยังไม่พบคำตอบในฐานความรู้ตอนนี้ครับ',\n  text ? `🗣️ คำถามของคุณ: ${text}` : '',\n  '',\n  tagHint,\n  '📝 ผมบันทึกคำถามนี้ไว้เพื่อปรับปรุงฐานความรู้แล้วครับ 🙏',\n  // เอาไว้ debug จะเปิด/ปิดก็ได้\n  // `🔎 key: ${key} | score: ${score}`,\n].filter(Boolean).join('\\n');\n\nreturn [\n  {\n    json: {\n      ...$json,\n      lineText: msg,\n      unknown: true,\n      unknown_text: text,\n      unknown_key: key,\n      unknown_score: score,\n      unknown_ts: new Date().toISOString(),\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        416
+      ],
+      "id": "b6a2b2f5-2cfd-4e89-8291-e991a2de53a7",
+      "name": "Code | Build LINE Message (False)"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "={{ $json.chatId }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-false)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        576,
+        416
+      ],
+      "id": "7f3929b3-7ba0-4d25-ac23-c1efa74d3251",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.lineText }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        880,
+        416
+      ],
+      "id": "b55a9a6a-ed98-4b86-a801-99dd8cc7bdbd",
+      "name": "LineMessageNode-False"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target-false)').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        1152,
+        416
+      ],
+      "id": "eb64627b-0342-44ca-9c6c-e136748caec1",
+      "name": "LineMessaging-SendMessage-False",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "1a7XRqAPElUVvhoP",
+          "name": "Line Messaging Auth account-n8n-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# 📚 05-LINE Chatbot Workflow : FAQ + Fuzzy Match\n",
+        "height": 1200,
+        "width": 2960,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1520,
+        -384
+      ],
+      "typeVersion": 1,
+      "id": "86955daa-d47c-42b9-b25e-923fc29a7ee7",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Normalize Text": {
+      "main": [
+        [
+          {
+            "node": "Detect /help",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect /help": {
+      "main": [
+        [
+          {
+            "node": "IF: isHelp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Top Topics": {
+      "main": [
+        [
+          {
+            "node": "Format /help List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format /help List": {
+      "main": [
+        [
+          {
+            "node": "Code | Build LINE Message-Help",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: isHelp": {
+      "main": [
+        [
+          {
+            "node": "Read Top Topics",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Detect Menu Pick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build LINE Message (True)": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-true)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-true)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-True",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-True": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-True",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build LINE Message-Help": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-Help)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-Help)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Help",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Help": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-Help",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Menu Pick": {
+      "main": [
+        [
+          {
+            "node": "IF isMenuPick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF isMenuPick": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read All FAQ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code | Build LINE Message (True)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Should Log Unknown": {
+      "main": [
+        [
+          {
+            "node": "Log Unknown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found?1": {
+      "main": [
+        [
+          {
+            "node": "Code | Build LINE Message (fuzzy)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code | Build LINE Message (False)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fuzzy Match": {
+      "main": [
+        [
+          {
+            "node": "Found?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-fuzzy)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Fuzzy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build LINE Message (fuzzy)": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-fuzzy)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read All FAQ": {
+      "main": [
+        [
+          {
+            "node": "Fuzzy Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Fuzzy": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-Fuzzy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build LINE Message (False)": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-false)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-false)": {
+      "main": [
+        [
+          {
+            "node": "IF: Should Log Unknown",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "LineMessageNode-False",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-False": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-False",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "9adee65c-d7a2-431c-9488-48a14c7aa19c",
+  "meta": {
+    "instanceId": "6e8bd4e6dcfe2d257f6d9648f4efaf76882daef04e1402d554d9aae9132bba97"
+  },
+  "id": "jYY97D5ceghLf0HZhw_FD",
+  "tags": []
+}
