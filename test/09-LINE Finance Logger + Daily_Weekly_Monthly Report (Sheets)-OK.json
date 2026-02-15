@@ -1,0 +1,2127 @@
+{
+  "name": "09-LINE Finance Logger + Daily_Weekly_Monthly Report (Sheets)-OK",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "line-finance",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "fd5e1d2e-3d00-4ff7-ae3f-3a368f5c12f9",
+      "name": "Webhook (LINE)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2688,
+        -1248
+      ],
+      "webhookId": "912cde45-d9df-46a8-b26b-da17804006f4"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nExtract LINE Messaging API payload fields from n8n Webhook node.\nWebhook output shape:\n{\n  headers, params, query,\n  body: { destination, events:[...] },\n  webhookUrl, executionMode\n}\n*/\n\nconst payload = $json.body;          // ✅ จุดที่ต้องแก้\nconst evt = payload?.events?.[0];\n\nif (!evt) {\n  return [{ json: { ok: false, error: 'No events[0] in body', payload } }];\n}\n\nconst text = evt?.message?.text ?? '';\nconst messageId = evt?.message?.id ?? '';\nconst timestamp = evt?.timestamp ?? Date.now();\n\nconst source = evt?.source ?? {};\nconst userId = source.userId ?? '';\nconst groupId = source.groupId ?? '';\nconst roomId = source.roomId ?? '';\n\nconst replyToken = evt?.replyToken ?? '';\n\n// group > room > user\nconst scopeId = groupId || roomId || userId;\n\nreturn [{\n  json: {\n    ok: true,\n    text,\n    messageId,\n    timestamp,\n    replyToken,\n    userId,\n    groupId,\n    roomId,\n    scopeId,\n    eventType: evt.type,\n    messageType: evt?.message?.type ?? ''\n  }\n}];"
+      },
+      "id": "55673a87-f443-4718-b491-a4270c73a441",
+      "name": "Fn: Extract LINE Event",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -2768,
+        -1008
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f64badd7-870b-454d-96e1-630fb2626f69",
+              "leftValue": "={{$json.ok}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "83cd7ebd-0c41-4a16-acfb-97c358618ea6",
+      "name": "IF: Has Event",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2912,
+        -784
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/**\n * Fn: Parse Message — FULL Production-ready (FIX 4 วรรค + Upgrade Category + Fuzzy Payment)\n * - FIX: ถ้าเหลือคำเดียวหลังตัด payment => เป็น note, category='อื่นๆ'\n * - UPGRADE: “ยกระดับหมวด” สำหรับคำทั่วไป เช่น ค่าไฟ/ค่าน้ำ/เน็ต/โทรศัพท์/น้ำมัน ฯลฯ\n * - Fuzzy Payment: รองรับคำลงท้ายภาษาพูด เช่น \"เงินสดนะ\", \"โอนแล้ว\", \"พร้อมเพย์จ้า\"\n */\n\nconst textRaw = String($json.text ?? '').trim();\nconst text = textRaw.replace(/\\s+/g, ' ').trim();\nconst lower = text.toLowerCase();\n\nconst messageId =\n  String($json.messageId ?? $json.messageid ?? $json.message_id ?? '').trim()\n  || String($json.timestamp ?? Date.now());\n\nconst setUnknown = () => {\n  $json.mode = 'unknown';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n};\n\nif (!text) return setUnknown();\n\n// ==========================\n// COMMAND ENGINE (includes) + 2-page menu\n// ==========================\nconst clean = lower.trim();\n\n// 1) ไปหน้า 2 (ต้องมาก่อน เพราะ menu:2 มีคำว่า menu)\nif (clean.includes('menu:2') || clean.includes('หน้าถัดไป') || clean.includes('หน้า 2')) {\n  $json.mode = 'menu2';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\n\n// 2) กลับหน้า 1\nif (\n  clean.includes('menu:1') ||\n  clean.includes('หน้าแรก') ||\n  clean.includes('หน้า 1') ||\n  clean.includes('กลับหน้าแรก')\n) {\n  $json.mode = 'menu1';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\n\n// 3) เปิดเมนูหน้า 1 (help/เมนู)\nif (\n  clean === 'help' || clean === '/help' ||\n  clean === 'menu' || clean === 'เมนู' ||\n  clean.includes('วิธีพิมพ์') || (clean.includes('ช่วย') && clean.includes('พิมพ์'))\n) {\n  $json.mode = 'menu1';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\n\n// 4) คำสั่งสรุป (ชัดเจน)\nif (/^สรุป\\s*วันนี้$/.test(clean) || clean === 'วันนี้') {\n  $json.mode = 'today';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\nif (/^สรุป\\s*เมื่อวาน$/.test(clean) || clean === 'เมื่อวาน') {\n  $json.mode = 'yesterday';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\nif (/^สรุป\\s*เดือนนี้$/.test(clean) || clean === 'เดือนนี้') {\n  $json.mode = 'month';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\n\n// detect type\nlet type = null;\nlet rest = text;\n\nif (rest.startsWith('รับ')) {\n  type = 'income';\n  rest = rest.replace(/^รับ\\s*/, '');\n} else if (rest.startsWith('จ่าย')) {\n  type = 'expense';\n  rest = rest.replace(/^จ่าย\\s*/, '');\n} else if (rest.startsWith('+')) {\n  type = 'income';\n  rest = rest.slice(1).trim();\n} else if (rest.startsWith('-')) {\n  type = 'expense';\n  rest = rest.slice(1).trim();\n}\nif (!type) return setUnknown();\n\n// remove optional \"เงิน\"\nrest = rest.replace(/^เงิน\\s*/i, '').trim();\n\n// parse amount\nconst m = rest.match(/^([0-9,]+(?:\\.[0-9]+)?)\\s*(.*)$/);\nif (!m) return setUnknown();\n\nconst amount = Number(String(m[1]).replace(/,/g, ''));\nlet tail = (m[2] ?? '').trim();\nif (!tail) tail = 'อื่นๆ';\n\n// payment\nlet payment = '';\nconst payMap = new Map([\n  ['เงินสด', 'เงินสด'],\n  ['สด', 'เงินสด'],\n\n  ['โอน', 'โอน'],\n  ['โอนเงิน', 'โอน'],\n\n  ['promptpay', 'พร้อมเพย์'],\n  ['พร้อมเพย์', 'พร้อมเพย์'],\n  ['พร้อมเพ', 'พร้อมเพย์'],\n  ['pp', 'พร้อมเพย์'],\n\n  // ✅ QR / Scan pay (ถือเป็น พร้อมเพย์)\n  ['สแกน', 'พร้อมเพย์'],\n  ['สแกนจ่าย', 'พร้อมเพย์'],\n  ['scan', 'พร้อมเพย์'],\n  ['qr', 'พร้อมเพย์'],\n  ['qrcode', 'พร้อมเพย์'],\n\n  ['บัตร', 'บัตร'],\n  ['บัตรเครดิต', 'บัตรเครดิต'],\n  ['เครดิต', 'บัตรเครดิต'],\n  ['เดบิต', 'บัตรเดบิต'],\n]);\n\n\nlet tokens = tail.split(' ').filter(Boolean);\n\n// -------------------------\n// detect payment from last 1-2 tokens (Fuzzy / Thai chat-friendly)\n// -------------------------\n\n// helper: normalize token ให้จับภาษาพูดได้ เช่น \"เงินสดนะ\" -> \"เงินสด\"\nconst normalizePayToken = (s) => {\n  let t = String(s ?? '').toLowerCase().trim();\n\n  // ตัดสัญลักษณ์ที่มักติดท้าย/หน้า\n  t = t.replace(/[.,!?，。！？]+/g, '');\n\n  // ตัดคำลงท้ายแนวภาษาพูด (เพิ่มได้ตามต้องการ)\n  t = t.replace(/(นะ|น้า|ครับ|ค่ะ|คับ|จ้า|จร้า|เด้อ|ด้วย|ที|หน่อย|หน่อยนะ|หน่อยครับ|หน่อยค่ะ|แล้ว|ละ|ล่ะ|อ่ะ|อะ)+$/g, '');\n\n  // กันกรณีมีช่องว่างแปลก ๆ\n  t = t.replace(/\\s+/g, ' ').trim();\n  return t;\n};\n\n// ตรวจ payment จากท้าย 1-2 คำ (แต่ใช้ includes + normalize)\nfor (let i = Math.max(0, tokens.length - 2); i < tokens.length; i++) {\n  const raw = String(tokens[i] ?? '');\n  const key = normalizePayToken(raw);\n\n  // ✅ PRIORITY FIX: จับเดบิต/เครดิตก่อน \"บัตร\"\n  if (key.includes('เดบิต') || key.includes('debit')) {\n    payment = 'บัตรเดบิต';\n    tokens.splice(i);\n    break;\n  }\n  if (key.includes('เครดิต') || key.includes('credit')) {\n    payment = 'บัตรเครดิต';\n    tokens.splice(i);\n    break;\n  }\n\n  // 1) match แบบตรงตัวก่อน\n  if (payMap.has(key)) {\n    payment = payMap.get(key);\n    tokens.splice(i);\n    break;\n  }\n\n  // 2) match แบบ contains (เช่น \"เงินสดนะ\", \"โอนแล้ว\", \"สแกนจ่าย\")\n  for (const [k, v] of payMap.entries()) {\n    const kk = String(k).toLowerCase();\n    if (key.includes(kk)) {\n      payment = v;\n      tokens.splice(i);\n      break;\n    }\n  }\n\n  if (payment) break;\n}\n\n\n// คงเคส \"บัตร เครดิต\" / \"บัตร เดบิต\"\nif (!payment && tokens.length >= 2) {\n  const last2 = `${tokens[tokens.length - 2]} ${tokens[tokens.length - 1]}`.toLowerCase();\n  if (last2 === 'บัตร เครดิต') {\n    payment = 'บัตรเครดิต';\n    tokens.splice(tokens.length - 2);\n  } else if (last2 === 'บัตร เดบิต') {\n    payment = 'บัตรเดบิต';\n    tokens.splice(tokens.length - 2);\n  }\n}\n\ntail = tokens.join(' ').trim();\nif (!tail) tail = 'อื่นๆ';\n\n// category + note\nlet category = 'อื่นๆ';\nlet note = '';\n\n// A) key-value\n{\n  const kvCat = tail.match(/(?:หมวด|category|cat)\\s*[:=]\\s*([^|]+?)(?=\\s+(?:รายการ|item|desc|description)\\s*[:=]|$)/i);\n  const kvItem = tail.match(/(?:รายการ|item|desc|description)\\s*[:=]\\s*(.+)$/i);\n\n  if (kvCat) category = String(kvCat[1] ?? '').trim() || 'อื่นๆ';\n  if (kvItem) note = String(kvItem[1] ?? '').trim() || '';\n\n  if (kvCat && !kvItem && !note) {\n    const tmp = tail.replace(kvCat[0], '').trim();\n    note = tmp;\n  }\n}\n\n// B) pipe\nif (!note && tail.includes('|')) {\n  const [c, n] = tail.split('|').map(s => s.trim());\n  category = c || 'อื่นๆ';\n  note = n || '';\n}\n\n// C) default\nif (!note && !tail.includes('|')) {\n  const parts = tail.split(' ').filter(Boolean);\n\n  // ✅ FIX: เหลือคำเดียว => เป็นรายการ, หมวด=อื่นๆ\n  if (parts.length === 1) {\n    category = 'อื่นๆ';\n    note = parts[0];\n  } else {\n    category = (parts.shift() ?? 'อื่นๆ').trim() || 'อื่นๆ';\n    note = parts.join(' ').trim();\n  }\n}\n\n// D) fallback: long concatenated word\nconst isLongCategory = (s) => {\n  const t = String(s ?? '').trim();\n  return t.length >= 10 && !/\\s/.test(t);\n};\nif (!note && isLongCategory(category) && category !== 'อื่นๆ') {\n  note = category;\n  category = 'อื่นๆ';\n}\n\ncategory = String(category ?? '').trim() || 'อื่นๆ';\nnote = String(note ?? '').trim();\n\n/* =========================\n * Auto Category Mapping (UPGRADE)\n * - ถ้า category เป็น \"อื่นๆ\" => map ตาม keyword\n * - ถ้า category เป็นคำทั่วไป => อนุญาต “ยกระดับหมวด”\n * ========================= */\n\nconst normalizedCat = String(category).trim().toLowerCase();\nconst allowOverrideCats = new Set([\n  'ค่าไฟ', 'ไฟฟ้า', 'ค่าน้ำ', 'ประปา', 'เน็ต', 'อินเตอร์เน็ต', 'wifi', 'ค่าโทร', 'โทรศัพท์',\n  'น้ำมัน', 'เติมน้ำมัน', 'แก๊ส', 'gas', 'bts', 'mrt', 'แท็กซี่', 'grab', 'bolt', 'ทางด่วน', 'ค่าทางด่วน', 'ค่าจอด', 'จอดรถ',\n  'กาแฟ', 'ข้าว', 'ก๋วยเตี๋ยว', 'อาหาร', 'ขนม', 'น้ำ', 'สุกี้'\n]);\n\nconst shouldMap =\n  (category === 'อื่นๆ') ||\n  allowOverrideCats.has(normalizedCat);\n\nconst textForCat = `${category} ${note}`.toLowerCase().trim();\nlet mappedCategory = 'อื่นๆ';\n\nconst categoryRules = [\n  {\n    cat: 'ค่าสาธารณูปโภค',\n    keywords: [\n      'ค่าไฟ', 'ไฟฟ้า', 'pea', 'การไฟฟ้า',\n      'ค่าน้ำ', 'ประปา',\n      'เน็ต', 'อินเตอร์เน็ต', 'wifi', 'เน็ตทรู', 'ais', 'dtac', 'true',\n      'ค่าโทร', 'โทรศัพท์'\n    ]\n  },\n  {\n    cat: 'เดินทาง',\n    keywords: [\n      'เติมน้ำมัน', 'น้ำมัน', 'แก๊ส', 'gas', 'ดีเซล', 'เบนซิน',\n      'ค่าทางด่วน', 'ทางด่วน', 'ค่าจอด', 'จอดรถ',\n      'รถไฟฟ้า', 'bts', 'mrt', 'รถเมล์', 'แท็กซี่', 'grab', 'bolt'\n    ]\n  },\n  {\n    cat: 'อาหาร',\n    keywords: [\n      'กาแฟ', 'คาปูชิโน่', 'ลาเต้', 'อเมริกาโน่', 'ชา', 'ชานม', 'นม',\n      'ข้าว', 'ก๋วยเตี๋ยว', 'ราดหน้า', 'ผัดไทย', 'ส้มตำ', 'หมู', 'ไก่', 'ปลา',\n      'อาหาร', 'ขนม', 'เบเกอรี่', 'น้ำ', 'น้ำเปล่า', 'น้ำอัดลม'\n    ]\n  },\n  {\n    cat: 'ของใช้ส่วนตัว',\n    keywords: [\n      'สบู่', 'ยาสระผม', 'แชมพู', 'ยาสีฟัน', 'แปรงสีฟัน', 'ทิชชู่',\n      'ผงซักฟอก', 'น้ำยาล้างจาน', 'น้ำยาถูพื้น', 'ของใช้'\n    ]\n  },\n  {\n    cat: 'สุขภาพ/ยา',\n    keywords: [\n      'ยา', 'โรงพยาบาล', 'คลินิก', 'หมอ', 'ตรวจ', 'ค่ารักษา', 'เวชภัณฑ์',\n      'วิตามิน'\n    ]\n  }\n];\n\nif (shouldMap) {\n  for (const rule of categoryRules) {\n    if (rule.keywords.some(k => textForCat.includes(String(k).toLowerCase()))) {\n      mappedCategory = rule.cat;\n      break;\n    }\n  }\n  category = mappedCategory;\n}\n\n// time\nconst tsObj = new Date($json.timestamp ?? Date.now());\nconst pad = (n) => String(n).padStart(2, '0');\nconst date = `${tsObj.getFullYear()}-${pad(tsObj.getMonth() + 1)}-${pad(tsObj.getDate())}`;\nconst month = `${tsObj.getFullYear()}-${pad(tsObj.getMonth() + 1)}`;\nconst ts = tsObj.toISOString();\n\n// scope\nconst scopeId = String($json.scopeId ?? $json.scopeid ?? $json.userId ?? $json.userid ?? '').trim();\n\n// row_key\nconst baseKey = `${scopeId}|${date}|${type}|${amount}|${category}|${note}|${payment}`;\nlet h = 5381;\nfor (let i = 0; i < baseKey.length; i++) {\n  h = ((h << 5) + h) + baseKey.charCodeAt(i);\n  h >>>= 0;\n}\nconst row_key = `rk_${h.toString(16)}`;\n\n// OUTPUT\n$json.mode = 'log';\n$json.type = type;\n$json.amount = amount;\n$json.category = category;\n$json.note = note || '';\n$json.payment = payment || '';\n$json.date = date;\n$json.month = month;\n$json.ts = ts;\n\n$json.messageId = messageId;\n$json.row_key = row_key;\n$json.raw_text = textRaw;\n\n$json.scopeId = scopeId || $json.scopeId;\n\n// Alias\n$json.item = $json.note;\n$json.description = $json.note;\n$json.รายการ = $json.note;\n$json.หมวด = $json.category;\n\nreturn [{ json: $json }];\n"
+      },
+      "id": "a961d2dc-2116-40e5-8f79-e2d313dcb82c",
+      "name": "Fn: Parse Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -2656,
+        -800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e0805f78-d590-488d-b1ae-e19b9f31128d",
+              "leftValue": "={{$json.mode}}",
+              "rightValue": "log",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e291de58-5145-4314-9308-f12670e3ea8c",
+      "name": "IF: Is Transaction",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1648,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40",
+          "mode": "list",
+          "cachedResultName": "my_memo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "row_key",
+              "lookupValue": "={{$json.row_key}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "64c40ecb-38b1-40de-9ba0-72590fe65c0f",
+      "name": "GS: Lookup row_key",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -1440,
+        -448
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "aC3dnZk38DhyTJHi",
+          "name": "Google Sheets account-bbMyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5254144-b753-443c-9682-e0f99032b62b",
+              "leftValue": "={{ $json.row_number !== undefined && $json.row_number !== null && $json.row_number !== '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a214b87d-3bf3-4505-bafc-8dc87f7f79f0",
+      "name": "IF: Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1264,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40",
+          "mode": "list",
+          "cachedResultName": "my_memo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ts": "={{$json.ts}}",
+            "date": "={{$json.date}}",
+            "month": "={{$json.month}}",
+            "userId": "={{$json.userId}}",
+            "source": "LINE",
+            "type": "={{$json.type}}",
+            "category": "={{$json.category}}",
+            "amount": "={{$json.amount}}",
+            "note": "={{$json.note}}",
+            "row_key": "={{$json.row_key}}",
+            "raw_text": "={{$json.raw_text}}",
+            "payment": "={{$json.payment}}",
+            "content_key": "={{$json.content_key}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "month",
+              "displayName": "month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "userId",
+              "displayName": "userId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "note",
+              "displayName": "note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payment",
+              "displayName": "payment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_key",
+              "displayName": "row_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "raw_text",
+              "displayName": "raw_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "content_key",
+              "displayName": "content_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "47f5945b-8d16-40e1-b35a-68533638a00d",
+      "name": "GS: Append Transaction",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -928,
+        -272
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "aC3dnZk38DhyTJHi",
+          "name": "Google Sheets account-bbMyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Code node: Prepare For Sheet (production-ready)\n * - รวมข้อมูลจาก \"Fn: Parse Message\" ให้เป็น $json ชุดเดียว\n * - สร้าง content_key ใน node นี้เลย (กันซ้ำตาม \"เนื้อหา\" ไม่ใช่ messageId)\n *\n * ต้องมี node ชื่อ: \"Fn: Parse Message\"\n */\n\nconst src = $node[\"Fn: Parse Message\"]?.json ?? {};\n\n// helper: normalize text (ลดช่องว่าง/ตัวพิมพ์/trim)\nconst norm = (v) =>\n  String(v ?? \"\")\n    .replace(/\\s+/g, \" \")\n    .trim()\n    .toLowerCase();\n\n// helper: safe number\nconst num = (v) => {\n  const n = Number(String(v ?? \"\").replace(/,/g, \"\"));\n  return Number.isFinite(n) ? n : 0;\n};\n\n// ดึง field หลักจาก parse\nconst ts = String(src.ts ?? new Date().toISOString());\nconst date = String(src.date ?? \"\");\nconst month = String(src.month ?? \"\");\nconst userId = String(src.scopeId ?? src.userId ?? \"\");\nconst source = \"LINE\";\n\nconst type = String(src.type ?? \"\");\nconst category = String(src.category ?? \"\");\nconst amount = num(src.amount);\nconst note = String(src.note ?? \"\");\nconst payment = String(src.payment ?? \"\");\nconst row_key = String(src.row_key ?? \"\");\nconst raw_text = String(src.raw_text ?? src.text ?? \"\");\n\n// ✅ content_key (กันซ้ำด้วย \"เนื้อหา\" + วัน + ผู้ใช้ + ประเภท + จำนวน + หมวด + โน้ต + วิธีจ่าย)\n// ถ้าต้องการให้ \"วันเดียวกัน+ข้อความเหมือนกัน\" ถือว่าซ้ำ -> ใช้แบบนี้ถูกต้อง\nconst content_key = [\n  norm(userId),\n  norm(date),\n  norm(type),\n  String(amount),\n  norm(category),\n  norm(note),\n  norm(payment),\n].join(\"|\");\n\nreturn [\n  {\n    json: {\n      ts,\n      date,\n      month,\n      userId,\n      source,\n      type,\n      category,\n      amount,\n      note,\n      payment,\n      row_key,\n      raw_text,\n      content_key,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        -272
+      ],
+      "id": "e76fcad6-5fed-4ddf-af8b-d5366036cbf9",
+      "name": "Code: Prepare For Sheet"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-GS-Append)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        -272
+      ],
+      "id": "3d1d1e59-b5a4-4bf1-8b1a-326f6804eed1",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        -272
+      ],
+      "id": "3017d05a-baed-4b48-8077-5989ef7f1c46",
+      "name": "LineMessageNode-GS-Append"
+    },
+    {
+      "parameters": {
+        "message": "={{$json.message}}",
+        "replyToken": "={{$node[\"Webhook (LINE)\"].json.body.events[0].replyToken}}",
+        "targetRecipient": "="
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -272
+      ],
+      "id": "f6c2839e-a2ca-4fad-9ad6-2ae38f844621",
+      "name": "LineMessaging-SendMessage-GS-Append",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Build LINE Message-GS-Append\n\nconst input = $json ?? {};\n\n// ---------- helper: format date/time Thai ----------\nfunction toBangkokParts(tsRaw) {\n  // รองรับ epoch sec/ms และ ISO string\n  let d;\n  if (typeof tsRaw === \"number\") {\n    const ms = tsRaw < 1e12 ? tsRaw * 1000 : tsRaw;\n    d = new Date(ms);\n  } else if (typeof tsRaw === \"string\" && tsRaw.trim()) {\n    const s = tsRaw.trim();\n    if (/^\\d+$/.test(s)) {\n      const n = Number(s);\n      const ms = n < 1e12 ? n * 1000 : n;\n      d = new Date(ms);\n    } else {\n      d = new Date(s);\n    }\n  } else {\n    d = new Date();\n  }\n\n  const date = new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    day: \"2-digit\",\n    month: \"2-digit\",\n    year: \"numeric\",\n  }).format(d);\n\n  const time = new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    hour: \"2-digit\",\n    minute: \"2-digit\",\n    hour12: false,\n  }).format(d);\n\n  return { date, time };\n}\n\nfunction numFmt(v) {\n  const n = typeof v === \"number\" ? v : Number(String(v ?? \"\").replace(/,/g, \"\"));\n  if (!Number.isFinite(n)) return String(v ?? \"\").trim();\n  return n.toLocaleString(\"th-TH\");\n}\n\n// ---------- pick fields ----------\nconst tsRaw = input.ts ?? input.timestamp ?? input.event?.timestamp ?? input.time ?? input.ts_utc ?? null;\nconst { date, time } = toBangkokParts(tsRaw);\n\nconst type = (input.type ?? \"\").toLowerCase();\nconst typeLabel = type === \"income\" ? \"รายรับ\" : \"รายจ่าย\";\nconst typeIcon = type === \"income\" ? \"💰\" : \"💸\";\n\nconst category = input.category ?? \"-\";\nconst note = input.note ?? \"-\";\nconst amount = input.amount ?? \"\";\nconst payment = input.payment ?? \"-\";\n\n// ถ้า amount ว่าง ให้ไม่โชว์เลข (กันข้อความหลุด)\nconst amountLine = amount !== \"\" ? `💰 จำนวน: ${numFmt(amount)} บาท` : `💰 จำนวน: -`;\n\n// ---------- build message ----------\nconst lineText = [\n  \"✅ บันทึกรายการสำเร็จ\",\n  \"\",\n  `📅 ${date} ${time} น.`,\n  `${typeIcon} ${typeLabel}`,\n  `🏷 หมวด: ${category}`,\n  `📝 รายการ: ${note}`,\n  amountLine,\n  `💳 ชำระ: ${payment}`,\n  \"\",\n  \"📊 บันทึกลงระบบเรียบร้อย\",\n].join(\"\\n\");\n\n// กันกรณี \\n เป็นตัวหนังสือ\nconst safeLineText = String(lineText)\n  .replace(/\\\\n/g, \"\\n\")\n  .replace(/\\r\\n/g, \"\\n\");\n\nreturn [\n  {\n    json: {\n      lineText: safeLineText,\n    },\n  },\n];\n"
+      },
+      "id": "372c68fb-add6-4418-a5e6-c06cea164310",
+      "name": "Code | Build LINE Message-GS-Append",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -704,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Build LINE Message-GS-No-Append\n// เวอร์ชันพร้อมใช้: ข้อความสวย + เวลาไทย + บอกว่า \"บันทึกไปแล้วเมื่อ ...\"\n// ต้องมี node ชื่อ \"GS: Lookup row_key\" อยู่ก่อนหน้า (Read/Lookup) เพื่อดึง ts รายการเดิม\n\nconst input = $json ?? {};\n\n// --------------------- helpers ---------------------\nfunction toBangkokParts(tsRaw) {\n  let d;\n\n  if (typeof tsRaw === \"number\") {\n    const ms = tsRaw < 1e12 ? tsRaw * 1000 : tsRaw;\n    d = new Date(ms);\n  } else if (typeof tsRaw === \"string\" && tsRaw.trim()) {\n    // รองรับ ISO เช่น ...Z หรือ \"YYYY-MM-DD HH:mm:ss\"\n    d = new Date(tsRaw.trim());\n  } else {\n    d = new Date();\n  }\n\n  const date = new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    day: \"2-digit\",\n    month: \"2-digit\",\n    year: \"numeric\",\n  }).format(d);\n\n  const time = new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    hour: \"2-digit\",\n    minute: \"2-digit\",\n    hour12: false,\n  }).format(d);\n\n  return { date, time };\n}\n\nfunction formatTimeOnly(tsRaw) {\n  if (!tsRaw) return null;\n  const d = new Date(tsRaw);\n  if (Number.isNaN(d.getTime())) return null;\n\n  return new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    hour: \"2-digit\",\n    minute: \"2-digit\",\n    hour12: false,\n  }).format(d);\n}\n\nfunction numFmt(v) {\n  const n = typeof v === \"number\" ? v : Number(String(v ?? \"\").replace(/,/g, \"\"));\n  if (!Number.isFinite(n)) return String(v ?? \"\").trim() || \"-\";\n  return n.toLocaleString(\"th-TH\");\n}\n\n// --------------------- current item fields ---------------------\nconst tsRaw = input.ts ?? input.timestamp ?? input.event?.timestamp ?? input.time ?? null;\nconst { date, time } = toBangkokParts(tsRaw);\n\nconst type = String(input.type ?? \"expense\").toLowerCase();\nconst typeLabel = type === \"income\" ? \"รายรับ\" : \"รายจ่าย\";\nconst typeIcon = type === \"income\" ? \"💰\" : \"💸\";\n\nconst category = input.category ?? \"-\";\nconst note = input.note ?? \"-\";\nconst amount = input.amount ?? \"\";\nconst payment = input.payment ?? \"-\";\n\nconst amountLine =\n  String(amount).trim() !== \"\" ? `💰 จำนวน: ${numFmt(amount)} บาท` : `💰 จำนวน: -`;\n\n// --------------------- lookup previous record timestamp ---------------------\nlet previousTs = null;\ntry {\n  const lookupItems = $items(\"GS: Lookup row_key\") || [];\n  // ให้เลือกแถวแรกที่เจอ\n  previousTs = lookupItems?.[0]?.json?.ts ?? null; // ใช้คอลัมน์ ts ในชีต\n} catch (e) {\n  previousTs = null;\n}\n\nconst previousTimeText = formatTimeOnly(previousTs);\n\n// --------------------- build message ---------------------\nconst lineText = [\n  \"⚠️ พบรายการซ้ำ ไม่ได้บันทึกเพิ่ม\",\n  \"\",\n  `📅 ${date} ${time} น.`,\n  `${typeIcon} ${typeLabel}`,\n  `🏷 หมวด: ${category}`,\n  `📝 รายการ: ${note}`,\n  amountLine,\n  `💳 ชำระ: ${payment}`,\n  \"\",\n  previousTimeText ? `🕒 บันทึกไปแล้วเมื่อ ${previousTimeText} น.` : null,\n  \"📊 ระบบป้องกันการบันทึกซ้ำทำงานเรียบร้อย\",\n].filter(Boolean).join(\"\\n\");\n\nreturn [\n  {\n    json: {\n      lineText,\n    },\n  },\n];\n"
+      },
+      "id": "caad55a3-4d5f-42b1-bf11-3f0b62b76f60",
+      "name": "Code | Build LINE Message-GS-No-Append",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -992,
+        -464
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-GS-No-Append)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        -464
+      ],
+      "id": "f822d53b-f5dc-4d8d-bcc9-250747c9c7d3",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        -464
+      ],
+      "id": "769a8f4f-1b89-4b55-b9d1-319d90765718",
+      "name": "LineMessageNode-GS-No-Append"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "={{$node[\"Webhook (LINE)\"].json.body.events[0].replyToken}}",
+        "targetRecipient": "="
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        -192,
+        -464
+      ],
+      "id": "e87c1418-1cf6-4c51-90e0-c95322857411",
+      "name": "LineMessaging-SendMessage-GS-No-Append",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d468a3ae-a8c0-4273-8ba6-b6a3a7c6a17c",
+              "leftValue": "={{ ['สรุปวันนี้','summary today','today'].includes(($json.text || '').toLowerCase()) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1984,
+        -896
+      ],
+      "id": "0e8b0788-f454-4526-b3f7-2871d7445246",
+      "name": "IF: Is Summary Today?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json ?? {};\n\nfunction todayBangkok() {\n  const d = new Date();\n  const parts = new Intl.DateTimeFormat(\"en-CA\", {\n    timeZone: \"Asia/Bangkok\",\n    year: \"numeric\",\n    month: \"2-digit\",\n    day: \"2-digit\",\n  }).formatToParts(d);\n  const get = (t) => parts.find(p => p.type === t)?.value ?? \"\";\n  return `${get(\"year\")}-${get(\"month\")}-${get(\"day\")}`;\n}\n\nreturn [{\n  json: {\n    userid: input.userid ?? input.userId ?? input.event?.source?.userId ?? \"\",\n    date: todayBangkok(),\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1536,
+        -1296
+      ],
+      "id": "dc3c14fe-96cd-43f0-b11c-e73a339f150d",
+      "name": "Code | Build Today Filters"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40",
+          "mode": "list",
+          "cachedResultName": "my_memo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "date",
+              "lookupValue": "={{$json.date}}"
+            },
+            {
+              "lookupColumn": "userId",
+              "lookupValue": "={{$json.userid}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1312,
+        -1296
+      ],
+      "id": "9b9dac3b-d215-4cf7-9127-4030cdc182d8",
+      "name": "GS: Read Today Rows",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "aC3dnZk38DhyTJHi",
+          "name": "Google Sheets account-bbMyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\n\nlet income = 0;\nlet expense = 0;\n\nfor (const r of rows) {\n  const amt = Number(r.amount) || 0;\n  if ((r.type || '').toLowerCase() === 'income') {\n    income += amt;\n  } else {\n    expense += amt;\n  }\n}\n\nreturn [{\n  json: {\n    count: rows.length,\n    income,\n    expense,\n    net: income - expense\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        -1296
+      ],
+      "id": "a334a2ae-785b-4a30-a049-6db67f1055c8",
+      "name": "Code: Summarize Today"
+    },
+    {
+      "parameters": {
+        "jsCode": "function fmt(n){ return (Number(n)||0).toLocaleString(\"th-TH\"); }\n\nconst lineText = `\n📌 สรุปวันนี้\n\n🧾 จำนวนรายการ: ${$json.count}\n💰 รายรับรวม: ${fmt($json.income)} บาท\n💸 รายจ่ายรวม: ${fmt($json.expense)} บาท\n📊 คงเหลือสุทธิ: ${fmt($json.net)} บาท\n`;\n\nreturn [{ json: { lineText } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        -1296
+      ],
+      "id": "8a93eded-aa6f-4aad-a6fa-d815d30a0815",
+      "name": "Code: Build LINE Message-SummaryToday"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-Sum-Today",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        -1296
+      ],
+      "id": "d5cdedd1-6b0d-4acd-8f55-49e508aab806",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        -1296
+      ],
+      "id": "d67da467-f79d-4eb9-bd3b-d83ea691265a",
+      "name": "LineMessageNode-Sum-Today"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "={{$node[\"Webhook (LINE)\"].json.body.events[0].replyToken}}",
+        "targetRecipient": "="
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -1296
+      ],
+      "id": "50b39a28-f973-472b-97c2-0d90464e8fa1",
+      "name": "LineMessaging-SendMessage-Sum-Today",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "37a38f62-c3c1-4426-9ad9-dfce418d4706",
+              "leftValue": "={{ \n['สรุปเดือน','สรุปเดือนนี้','summary month','summary this month']\n.some(k => ($json.text || '').toLowerCase().includes(k)) \n}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1488,
+        -672
+      ],
+      "id": "d4c0101e-930b-4c6d-ab7f-795e44257bbb",
+      "name": "IF: Is Summary Month?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Build Month Filters\n// รองรับ: \"สรุปเดือนนี้\", \"สรุปเดือน กุมภาพันธ์ 2569\", \"สรุปเดือน 06\", \"สรุปเดือน 06/2569\"\n\nconst first = $input.first()?.json ?? {};   // ✅ สำคัญมากสำหรับ Run once\nconst text = String(first.text ?? first.raw_text ?? \"\").trim().toLowerCase();\n\n// ---------------- Thai month map ----------------\nconst thaiMonths = {\n  \"มกราคม\": \"01\",\n  \"กุมภาพันธ์\": \"02\",\n  \"มีนาคม\": \"03\",\n  \"เมษายน\": \"04\",\n  \"พฤษภาคม\": \"05\",\n  \"มิถุนายน\": \"06\",\n  \"กรกฎาคม\": \"07\",\n  \"สิงหาคม\": \"08\",\n  \"กันยายน\": \"09\",\n  \"ตุลาคม\": \"10\",\n  \"พฤศจิกายน\": \"11\",\n  \"ธันวาคม\": \"12\",\n};\n\nfunction currentMonthTH() {\n  // ใช้เวลาไทยเพื่อกันเหลื่อมวัน/เดือน\n  const now = new Date();\n  const parts = new Intl.DateTimeFormat(\"en-CA\", {\n    timeZone: \"Asia/Bangkok\",\n    year: \"numeric\",\n    month: \"2-digit\",\n  }).formatToParts(now);\n\n  const get = (t) => parts.find(p => p.type === t)?.value ?? \"\";\n  return { year: Number(get(\"year\")), month: get(\"month\") };\n}\n\nconst cur = currentMonthTH();\n\nlet yearAD = null;   // ปี ค.ศ.\nlet month = null;    // \"01\"..\"12\"\n\n// ---------------- 1) \"สรุปเดือนนี้\" ----------------\nif (text.includes(\"สรุปเดือนนี้\") || text === \"สรุปเดือนนี้\") {\n  yearAD = cur.year;\n  month = cur.month;\n}\n\n// ---------------- 2) \"สรุปเดือน <ชื่อเดือนไทย> 25xx\" ----------------\nif (!month) {\n  for (const mName of Object.keys(thaiMonths)) {\n    if (text.includes(mName)) {\n      month = thaiMonths[mName];\n\n      // หา พ.ศ. เช่น 2569\n      const beMatch = text.match(/25\\d{2}/);\n      if (beMatch) yearAD = Number(beMatch[0]) - 543;\n      else yearAD = cur.year;\n\n      break;\n    }\n  }\n}\n\n// ---------------- 3) \"สรุปเดือน 06/2569\" หรือ \"สรุปเดือน 6/2569\" ----------------\nif (!month) {\n  const m = text.match(/(?:เดือน|month)\\s*([0-9]{1,2})\\s*[\\/\\-]\\s*(25\\d{2}|20\\d{2})/i);\n  if (m) {\n    month = String(m[1]).padStart(2, \"0\");\n    const y = Number(m[2]);\n    yearAD = y >= 2500 ? (y - 543) : y;\n  }\n}\n\n// ---------------- 4) \"สรุปเดือน 06\" หรือ \"สรุปเดือน 6\" ----------------\nif (!month) {\n  const m = text.match(/(?:เดือน|month)\\s*([0-9]{1,2})\\b/i);\n  if (m) {\n    month = String(m[1]).padStart(2, \"0\");\n    yearAD = cur.year;\n  }\n}\n\n// ---------------- fallback ----------------\nif (!month) {\n  month = cur.month;\n  yearAD = cur.year;\n}\n\n// ---------------- userid (กันหลุด) ----------------\nconst userid =\n  first.userid ??\n  first.userId ??\n  first.event?.source?.userId ??\n  first.userid_line ??   // เผื่อคุณตั้งชื่อไว้เอง\n  \"\";\n\n// ✅ ส่งออกทั้ง userid + month\nreturn [{\n  json: {\n    userid,\n    month: `${yearAD}-${month}`,\n    // debug เผื่อเช็ค\n    _debug_text: text,\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        -688
+      ],
+      "id": "5124a7b7-9fbf-4f3e-a7f2-55aec076b433",
+      "name": "Code | Build Month Filters"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40",
+          "mode": "list",
+          "cachedResultName": "my_memo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "month",
+              "lookupValue": "={{$json.month}}"
+            },
+            {
+              "lookupColumn": "userId",
+              "lookupValue": "={{$json.userid}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1104,
+        -688
+      ],
+      "id": "c2b1feb8-2c69-42d1-8d97-224248ebc54b",
+      "name": "GS: Read Month Rows",
+      "credentials": {
+        "googleApi": {
+          "id": "aC3dnZk38DhyTJHi",
+          "name": "Google Sheets account-bbMyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Build LINE Message-Summary-Monthly\n// อินพุต: ผลจาก Code | Summarize Monthly\n// เอาต์พุต: lineText สำหรับส่งเข้า LINE SendMessage\n\nconst input = $json ?? {};\n\n// ---------- helpers ----------\nfunction fmt(n) {\n  return (Number(n) || 0).toLocaleString(\"th-TH\");\n}\n\nfunction monthThaiLabel(monthStr) {\n  // monthStr = \"YYYY-MM\"\n  if (!monthStr) return \"เดือนนี้\";\n\n  const [y, m] = monthStr.split(\"-\");\n  const thaiMonths = [\n    \"มกราคม\",\"กุมภาพันธ์\",\"มีนาคม\",\"เมษายน\",\"พฤษภาคม\",\"มิถุนายน\",\n    \"กรกฎาคม\",\"สิงหาคม\",\"กันยายน\",\"ตุลาคม\",\"พฤศจิกายน\",\"ธันวาคม\"\n  ];\n\n  const yearBE = Number(y) + 543;\n  const monthName = thaiMonths[Number(m) - 1] ?? m;\n\n  return `${monthName} ${yearBE}`;\n}\n\n// ถ้ามี month ส่งมาจาก Build Month Filters จะใช้แสดงหัวข้อ\nconst monthLabel = monthThaiLabel(input.month);\n\n// ---------- top list ----------\nconst topExp = (input.topExpense ?? [])\n  .map(([c,v], idx) => `${idx+1}. ${c} ${fmt(v)} บาท`)\n  .join(\"\\n\") || \"-\";\n\nconst topInc = (input.topIncome ?? [])\n  .map(([c,v], idx) => `${idx+1}. ${c} ${fmt(v)} บาท`)\n  .join(\"\\n\") || \"-\";\n\n// ---------- build message ----------\nconst lineText = `\n📌 สรุปเดือน ${monthLabel}\n\n🧾 จำนวนรายการ: ${input.count ?? 0}\n💰 รายรับรวม: ${fmt(input.income)} บาท\n💸 รายจ่ายรวม: ${fmt(input.expense)} บาท\n📊 คงเหลือสุทธิ: ${fmt(input.net)} บาท\n\n🏷 Top 3 รายจ่าย:\n${topExp}\n\n🏷 Top 3 รายรับ:\n${topInc}\n`.trim();\n\nreturn [{\n  json: {\n    lineText\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        -688
+      ],
+      "id": "a763c2de-59cb-4632-b78c-9423302e3a84",
+      "name": "Code: Build LINE Message-Summary-Monthly"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Summarize Monthly\n// INPUT: rows จาก GS: Read Month Rows (หลาย items)\n// OUTPUT: summary + month(userid) ส่งต่อให้ Build LINE Message\n\nconst rows = $input.all().map(i => i.json);\n\n// ดึง month/userid จากแถวแรก (ถ้ามี) หรือจาก input.first()\nconst first = $input.first()?.json ?? {};\nconst month = rows[0]?.month ?? first.month ?? \"\";\nconst userid = rows[0]?.userid ?? first.userid ?? \"\";\n\nlet income = 0;\nlet expense = 0;\n\nconst expByCat = {};\nconst incByCat = {};\n\nfor (const r of rows) {\n  const amt = Number(r.amount) || 0;\n  const type = String(r.type || \"\").toLowerCase();\n  const cat = String(r.category || \"ไม่ระบุ\");\n\n  if (type === \"income\") {\n    income += amt;\n    incByCat[cat] = (incByCat[cat] || 0) + amt;\n  } else {\n    expense += amt;\n    expByCat[cat] = (expByCat[cat] || 0) + amt;\n  }\n}\n\nfunction top3(obj) {\n  return Object.entries(obj)\n    .sort((a,b) => b[1] - a[1])\n    .slice(0, 3);\n}\n\nreturn [{\n  json: {\n    month,\n    userid,\n    count: rows.length,\n    income,\n    expense,\n    net: income - expense,\n    topExpense: top3(expByCat),\n    topIncome: top3(incByCat),\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        -688
+      ],
+      "id": "b0f77897-b4d3-496e-a174-af5f7b52cae1",
+      "name": "Code: Summarize Monthly"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-Sum-Monthly",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        -688
+      ],
+      "id": "f28c6c5f-3f93-4a1f-8355-e367232a24eb",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        -688
+      ],
+      "id": "67e40f49-91e4-4c44-95f8-a02bc9227b98",
+      "name": "LineMessageNode-Sum-Monthly"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "={{$node[\"Webhook (LINE)\"].json.body.events[0].replyToken}}",
+        "targetRecipient": "="
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        -688
+      ],
+      "id": "964f17b3-9aa8-4326-9a0d-c35cad80297c",
+      "name": "LineMessaging-SendMessage-Sum-Monthly",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "37a38f62-c3c1-4426-9ad9-dfce418d4706",
+              "leftValue": "={{ ['สรุปเมื่อวาน','เมื่อวาน','yesterday'].includes(($json.text||'').toLowerCase()) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1712,
+        -880
+      ],
+      "id": "8dc87de3-5795-4e94-b6ff-79e8054f2a75",
+      "name": "IF: Is Summary Yesterday?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Build Yesterday Filters\n// สร้างค่า date ของ \"เมื่อวาน\" (YYYY-MM-DD) แบบเวลาไทย + userid สำหรับ filter ใน Google Sheets\n\nconst input = $json ?? {};\n\nfunction ymdBangkokOffset(daysBack = 0) {\n  // 1) เอาวันที่ \"วันนี้\" ในเขตเวลา Asia/Bangkok\n  const now = new Date();\n  const parts = new Intl.DateTimeFormat(\"en-CA\", {\n    timeZone: \"Asia/Bangkok\",\n    year: \"numeric\",\n    month: \"2-digit\",\n    day: \"2-digit\",\n  }).formatToParts(now);\n\n  const get = (t) => parts.find(p => p.type === t)?.value ?? \"\";\n  const y = Number(get(\"year\"));\n  const m = Number(get(\"month\"));\n  const d = Number(get(\"day\"));\n\n  // 2) สร้าง Date อ้างอิงที่เที่ยงวัน UTC (กันปัญหา timezone/ข้ามวัน)\n  const base = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));\n  base.setUTCDate(base.getUTCDate() - daysBack);\n\n  // 3) แปลงกลับเป็น YYYY-MM-DD ใน Bangkok\n  const parts2 = new Intl.DateTimeFormat(\"en-CA\", {\n    timeZone: \"Asia/Bangkok\",\n    year: \"numeric\",\n    month: \"2-digit\",\n    day: \"2-digit\",\n  }).formatToParts(base);\n\n  const get2 = (t) => parts2.find(p => p.type === t)?.value ?? \"\";\n  return `${get2(\"year\")}-${get2(\"month\")}-${get2(\"day\")}`;\n}\n\nreturn [{\n  json: {\n    userid: input.userid ?? input.userId ?? input.event?.source?.userId ?? \"\",\n    date: ymdBangkokOffset(1), // ✅ เมื่อวาน\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1568,
+        -1040
+      ],
+      "id": "0b97e231-e11b-4ded-82be-28d928d2d73b",
+      "name": "Code | Build Yesterday Filters"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40",
+          "mode": "list",
+          "cachedResultName": "my_memo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "date",
+              "lookupValue": "={{$json.date}}"
+            },
+            {
+              "lookupColumn": "userId",
+              "lookupValue": "={{$json.userid}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1360,
+        -1040
+      ],
+      "id": "ec24e788-18fb-494c-a2d2-7a8d8d1c3a92",
+      "name": "GS: Read Yesterday Rows",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "aC3dnZk38DhyTJHi",
+          "name": "Google Sheets account-bbMyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Build LINE Message-SummaryYesterday\n// อินพุต: ผลจาก Code | Summarize Yesterday\n// เอาต์พุต: lineText สำหรับส่งเข้า LINE SendMessage\n\nconst input = $json ?? {};\n\nfunction fmt(n) {\n  return (Number(n) || 0).toLocaleString(\"th-TH\");\n}\n\n// Top 3 lists\nconst topExp = (input.topExpense ?? [])\n  .map(([c, v], i) => `${i + 1}. ${c} ${fmt(v)} บาท`)\n  .join(\"\\n\") || \"-\";\n\nconst topInc = (input.topIncome ?? [])\n  .map(([c, v], i) => `${i + 1}. ${c} ${fmt(v)} บาท`)\n  .join(\"\\n\") || \"-\";\n\nconst lineText = [\n  \"📌 สรุปเมื่อวาน\",\n  \"\",\n  `🧾 จำนวนรายการ: ${input.count ?? 0}`,\n  `💰 รายรับรวม: ${fmt(input.income)} บาท`,\n  `💸 รายจ่ายรวม: ${fmt(input.expense)} บาท`,\n  `📊 คงเหลือสุทธิ: ${fmt(input.net)} บาท`,\n  \"\",\n  \"🏷 Top 3 รายจ่าย:\",\n  topExp,\n  \"\",\n  \"🏷 Top 3 รายรับ:\",\n  topInc,\n].join(\"\\n\");\n\nreturn [{ json: { lineText } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        -1056
+      ],
+      "id": "341e8247-c68c-4354-b5c2-adc58a2f5fb9",
+      "name": "Code: Build LINE Message-SummaryYesterday"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-Sum-Yesterday",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        -1056
+      ],
+      "id": "853b7c40-d5a8-4265-ad38-b8994b4cdbf1",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        -1056
+      ],
+      "id": "557150d6-977b-4c06-bf76-69bc6ff3409e",
+      "name": "LineMessageNode-Sum-Yesterday"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "={{$node[\"Webhook (LINE)\"].json.body.events[0].replyToken}}",
+        "targetRecipient": "="
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        -1056
+      ],
+      "id": "867301eb-4832-4c3c-856c-89788a33d305",
+      "name": "LineMessaging-SendMessage-Sum-Yesterday",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Summarize Yesterday\n// อินพุต: รายการ (rows) จาก GS: Read Yesterday Rows (แต่ละ item = 1 แถวในชีต)\n// เอาต์พุต: count/income/expense/net + Top 3 หมวดรายจ่าย/รายรับ\n\nconst rows = $input.all().map(i => i.json);\n\n// ---------- helpers ----------\nconst toNum = (v) => {\n  const n = Number(String(v ?? \"\").replace(/,/g, \"\").trim());\n  return Number.isFinite(n) ? n : 0;\n};\n\nconst add = (obj, key, val) => {\n  obj[key] = (obj[key] ?? 0) + val;\n};\n\nconst top3 = (obj) =>\n  Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, 3);\n\n// ---------- aggregate ----------\nlet income = 0;\nlet expense = 0;\n\nconst byCategoryIncome = {};\nconst byCategoryExpense = {};\n\nfor (const r of rows) {\n  const type = String(r.type ?? \"expense\").toLowerCase();\n  const cat = String(r.category ?? \"ไม่ระบุ\").trim() || \"ไม่ระบุ\";\n  const amt = toNum(r.amount);\n\n  if (type === \"income\") {\n    income += amt;\n    add(byCategoryIncome, cat, amt);\n  } else {\n    expense += amt;\n    add(byCategoryExpense, cat, amt);\n  }\n}\n\nreturn [{\n  json: {\n    count: rows.length,\n    income,\n    expense,\n    net: income - expense,\n    topExpense: top3(byCategoryExpense),\n    topIncome: top3(byCategoryIncome),\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -912,
+        -1056
+      ],
+      "id": "146498b4-a4f5-47ca-ae16-bdf3bc569e45",
+      "name": "Code:  Summarize Yesterday"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "866830e9-f426-4f10-9b60-abc638146a6a",
+              "leftValue": "={{ $input.all().filter(i => i.json.row_number).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1152,
+        -1040
+      ],
+      "id": "ae693ece-b063-40a8-9ebb-7d15f0d43341",
+      "name": "IF: Has Yesterday Rows?"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    lineText: \"⚠️ สรุปเมื่อวาน\\n\\nไม่พบรายการเมื่อวานครับ\"\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -992,
+        -896
+      ],
+      "id": "410804f5-f184-45f6-a4be-b62c8788e64a",
+      "name": "Code: Build LINE Message-NoDataYesterday"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-Sum-Yesterday1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        -896
+      ],
+      "id": "8e35f4c4-3d5d-4cf6-99ee-e3ca24a749bf",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -496,
+        -896
+      ],
+      "id": "7146b543-b100-4554-be08-e2ad25504cef",
+      "name": "LineMessageNode-Sum-Yesterday1"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "={{$node[\"Webhook (LINE)\"].json.body.events[0].replyToken}}",
+        "targetRecipient": "="
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        -896
+      ],
+      "id": "002e797e-64dd-47b7-bd3d-0598974516b0",
+      "name": "LineMessaging-SendMessage-Sum-Yesterday1",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## 📅📊 02 | Daily Summary Module | โมดูลสรุปรายวัน",
+        "height": 240,
+        "width": 2000,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1760,
+        -1360
+      ],
+      "typeVersion": 1,
+      "id": "c28d63f5-2775-4adf-8a88-7527cefb6450",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## ⏪📅 03 | Yesterday Summary Module | โมดูลสรุปย้อนหลัง 1 วัน",
+        "height": 400,
+        "width": 2000
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1760,
+        -1120
+      ],
+      "typeVersion": 1,
+      "id": "e0edac75-c20e-4f01-bf90-2f5dad81532d",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## 🗓📈 04 | Monthly Summary Engine | โมดูลสรุปรายเดือน",
+        "height": 208,
+        "width": 2000,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1760,
+        -720
+      ],
+      "typeVersion": 1,
+      "id": "4ab9d818-3652-4b02-b29a-021daeb5e4e5",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## 💾🛡 05 | Transaction Logging & Validation | โมดูลบันทึกรายการและป้องกันข้อมูลซ้ำ",
+        "height": 416,
+        "width": 2000,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1760,
+        -512
+      ],
+      "typeVersion": 1,
+      "id": "d6b9219e-75d3-4281-adda-be59d87fd3a6",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## 🧠📥 01 | Core Router & Command Parser \n## |  ตัวรับข้อความและตัวแยกคำสั่ง",
+        "height": 1264,
+        "width": 1216,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2976,
+        -1360
+      ],
+      "typeVersion": 1,
+      "id": "0aac89f7-b29d-442e-b4fe-f247bb8ac749",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "bc0161c0-11c7-47f1-8703-1d8fb9f6e433",
+              "leftValue": "={{$json.mode}}",
+              "rightValue": "unknown",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "77eb0cf3-63c2-4e98-8481-266f2d21d04a",
+              "leftValue": "={{$json.mode}}",
+              "rightValue": "help",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "4b5b9dcf-212e-4e42-9acf-17c9cb9a5c04",
+              "leftValue": "={{$json.mode}}",
+              "rightValue": "menu1",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "530afb48-d79f-464f-aca0-a656cffac8c8",
+              "leftValue": "={{$json.mode}}",
+              "rightValue": "menu2",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -2496,
+        -912
+      ],
+      "id": "f57cdb02-9200-4d3d-b7b9-b963eb6c15cd",
+      "name": "IF | Check Mode"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c3f00e4f-bc4b-4147-8eba-632f18b58a46",
+              "leftValue": "={{$json.mode}}",
+              "rightValue": "menu2",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -2384,
+        -1152
+      ],
+      "id": "cdbbb5bf-7ec1-4b5c-b5d2-e168e07d6347",
+      "name": "IF | Menu Page?"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "Uce0221f1e2004f93bcd2e2acc5905502"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target)2",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -2176,
+        -1264
+      ],
+      "id": "0eee0a10-a098-437c-866d-a275e0f7879b"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "Uce0221f1e2004f93bcd2e2acc5905502"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target)1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -2192,
+        -1088
+      ],
+      "id": "30faa994-460a-4fe1-802c-c0f15139dfd0"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer 0UU2lcwKEZ0t1bhkbXmmyI+h2lWM7Mvo4QZEdbKYIasvO0/FMomBjUttilNtj3TuVErlSgr8pIE/7K20HkhUqoggfXwNFgfWRHsmZoea9qsA5cG4AuroXvIdGVnLeJ1V6OKs+oFKh5Q1LnbEBJMNFwdB04t89/1O/w1cDnyilFU="
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"replyToken\": \"{{$json.replyToken}}\",\n  \"messages\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"เลือกเมนูได้เลยครับ 👇 (กดเพื่อส่งตัวอย่างทันที)\",\n      \"quickReply\": {\n        \"items\": [\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"🍜 อาหาร\", \"text\": \"จ่าย 100 ก๋วยเตี๋ยว โอน\" } },\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"☕ กาแฟ\", \"text\": \"จ่าย 75 กาแฟ สแกนจ่าย\" } },\n\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"⚡ ค่าไฟ/PEA\", \"text\": \"จ่าย 1200 ค่าไฟ PEA โอน\" } },\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"📶 ค่าเน็ต\", \"text\": \"จ่าย 800 ค่าเน็ต บัตรเครดิต\" } },\n\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"🚕 เดินทาง\", \"text\": \"จ่าย 120 ค่าเดินทาง แท็กซี่ เงินสด\" } },\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"⛽ เติมน้ำมัน\", \"text\": \"จ่าย 600 เติมน้ำมัน โอน\" } },\n\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"🧴 ของใช้\", \"text\": \"จ่าย 300 ซื้อยาสระผม เงินสด\" } },\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"💊 สุขภาพ/ยา\", \"text\": \"จ่าย 250 ค่ายา วิตามิน เงินสด\" } },\n\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"💰 รายรับ\", \"text\": \"รับ 35000 เงินเดือน โอน\" } },\n\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"📅 วันนี้\", \"text\": \"วันนี้\" } },\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"📆 เมื่อวาน\", \"text\": \"เมื่อวาน\" } },\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"📊 เดือนนี้\", \"text\": \"สรุปเดือนนี้\" } },\n          { \"type\": \"action\", \"action\": { \"type\": \"message\", \"label\": \"ℹ️ วิธีพิมพ์\", \"text\": \"help\" } }\n        ]\n      }\n    }\n  ]\n}\n",
+        "options": {}
+      },
+      "name": "HTTP Request → LINE Push",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1328,
+        -1536
+      ],
+      "id": "1a3c59ac-d121-49e8-a76e-65f97e6723a0"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer 0UU2lcwKEZ0t1bhkbXmmyI+h2lWM7Mvo4QZEdbKYIasvO0/FMomBjUttilNtj3TuVErlSgr8pIE/7K20HkhUqoggfXwNFgfWRHsmZoea9qsA5cG4AuroXvIdGVnLeJ1V6OKs+oFKh5Q1LnbEBJMNFwdB04t89/1O/w1cDnyilFU="
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"replyToken\": \"{{$json.replyToken}}\",\n  \"messages\": [\n    {\n      \"type\": \"flex\",\n      \"altText\": \"สรุป & คำสั่ง\",\n      \"contents\": {\n        \"type\": \"bubble\",\n        \"size\": \"mega\",\n        \"body\": {\n          \"type\": \"box\",\n          \"layout\": \"vertical\",\n          \"spacing\": \"lg\",\n          \"contents\": [\n            {\n              \"type\": \"text\",\n              \"text\": \"สรุป & คำสั่ง\",\n              \"weight\": \"bold\",\n              \"size\": \"lg\",\n              \"color\": \"#111827\"\n            },\n            {\n              \"type\": \"text\",\n              \"text\": \"เลือกเมนูที่ต้องการ\",\n              \"size\": \"sm\",\n              \"color\": \"#6B7280\"\n            },\n            {\n              \"type\": \"box\",\n              \"layout\": \"vertical\",\n              \"margin\": \"lg\",\n              \"spacing\": \"md\",\n              \"contents\": [\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"spacing\": \"md\",\n                  \"contents\": [\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"paddingAll\": \"14px\",\n                      \"cornerRadius\": \"16px\",\n                      \"backgroundColor\": \"#16A34A\",\n                      \"action\": { \"type\": \"message\", \"label\": \"สรุปวันนี้\", \"text\": \"สรุปวันนี้\" },\n                      \"contents\": [\n                        { \"type\": \"image\", \"url\": \"https://cdn-icons-png.flaticon.com/512/747/747310.png\", \"size\": \"28px\", \"align\": \"center\" },\n                        { \"type\": \"text\", \"text\": \"สรุปวันนี้\", \"align\": \"center\", \"size\": \"sm\", \"weight\": \"bold\", \"color\": \"#FFFFFF\", \"margin\": \"sm\" }\n                      ],\n                      \"flex\": 1\n                    },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"paddingAll\": \"14px\",\n                      \"cornerRadius\": \"16px\",\n                      \"backgroundColor\": \"#16A34A\",\n                      \"action\": { \"type\": \"message\", \"label\": \"สรุปเมื่อวาน\", \"text\": \"สรุปเมื่อวาน\" },\n                      \"contents\": [\n                        { \"type\": \"image\", \"url\": \"https://cdn-icons-png.flaticon.com/512/747/747376.png\", \"size\": \"28px\", \"align\": \"center\" },\n                        { \"type\": \"text\", \"text\": \"สรุปเมื่อวาน\", \"align\": \"center\", \"size\": \"sm\", \"weight\": \"bold\", \"color\": \"#FFFFFF\", \"margin\": \"sm\" }\n                      ],\n                      \"flex\": 1\n                    }\n                  ]\n                },\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"spacing\": \"md\",\n                  \"contents\": [\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"paddingAll\": \"14px\",\n                      \"cornerRadius\": \"16px\",\n                      \"backgroundColor\": \"#16A34A\",\n                      \"action\": { \"type\": \"message\", \"label\": \"สรุปเดือนนี้\", \"text\": \"สรุปเดือนนี้\" },\n                      \"contents\": [\n                        { \"type\": \"image\", \"url\": \"https://cdn-icons-png.flaticon.com/512/1828/1828884.png\", \"size\": \"28px\", \"align\": \"center\" },\n                        { \"type\": \"text\", \"text\": \"สรุปเดือนนี้\", \"align\": \"center\", \"size\": \"sm\", \"weight\": \"bold\", \"color\": \"#FFFFFF\", \"margin\": \"sm\" }\n                      ],\n                      \"flex\": 1\n                    },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"paddingAll\": \"14px\",\n                      \"cornerRadius\": \"16px\",\n                      \"backgroundColor\": \"#E5E7EB\",\n                      \"action\": { \"type\": \"message\", \"label\": \"วิธีพิมพ์\", \"text\": \"help\" },\n                      \"contents\": [\n                        { \"type\": \"image\", \"url\": \"https://cdn-icons-png.flaticon.com/512/1828/1828919.png\", \"size\": \"28px\", \"align\": \"center\" },\n                        { \"type\": \"text\", \"text\": \"วิธีพิมพ์\", \"align\": \"center\", \"size\": \"sm\", \"weight\": \"bold\", \"color\": \"#111827\", \"margin\": \"sm\" }\n                      ],\n                      \"flex\": 1\n                    }\n                  ]\n                }\n              ]\n            },\n            { \"type\": \"separator\", \"margin\": \"lg\" }\n          ]\n        },\n        \"footer\": {\n  \"type\": \"box\",\n  \"layout\": \"vertical\",\n  \"paddingAll\": \"0px\",\n  \"paddingTop\": \"0px\",\n  \"paddingBottom\": \"0px\",\n  \"paddingStart\": \"0px\",\n  \"paddingEnd\": \"0px\",\n  \"spacing\": \"none\",\n  \"contents\": [\n    {\n      \"type\": \"button\",\n      \"style\": \"primary\",\n      \"color\": \"#16A34A\",\n      \"height\": \"md\",\n      \"margin\": \"none\",\n      \"action\": {\n        \"type\": \"message\",\n        \"label\": \"กลับหน้าแรก\",\n        \"text\": \"กลับหน้าแรก\"\n      }\n    }\n  ]\n}\n      }\n    }\n  ]\n}\n",
+        "options": {}
+      },
+      "name": "HTTP Request → LINE Reply2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1984,
+        -1264
+      ],
+      "id": "5f6fe69d-3c19-4ffe-8906-7aced80a7c54"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer 0UU2lcwKEZ0t1bhkbXmmyI+h2lWM7Mvo4QZEdbKYIasvO0/FMomBjUttilNtj3TuVErlSgr8pIE/7K20HkhUqoggfXwNFgfWRHsmZoea9qsA5cG4AuroXvIdGVnLeJ1V6OKs+oFKh5Q1LnbEBJMNFwdB04t89/1O/w1cDnyilFU="
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"replyToken\": \"{{$json.replyToken}}\",\n  \"messages\": [\n    {\n      \"type\": \"flex\",\n      \"altText\": \"หน้า 1/2 : ตัวอย่างบันทึก\",\n      \"contents\": {\n        \"type\": \"bubble\",\n        \"size\": \"giga\",\n        \"styles\": {\n          \"body\": { \"backgroundColor\": \"#F6F7F9\" },\n          \"footer\": { \"backgroundColor\": \"#F6F7F9\" }\n        },\n        \"body\": {\n          \"type\": \"box\",\n          \"layout\": \"vertical\",\n          \"spacing\": \"md\",\n          \"paddingAll\": \"16px\",\n          \"contents\": [\n            {\n              \"type\": \"text\",\n              \"text\": \"ตัวอย่างบันทึก\",\n              \"weight\": \"bold\",\n              \"size\": \"xl\",\n              \"color\": \"#111111\"\n            },\n            {\n              \"type\": \"text\",\n              \"text\": \"หน้า 1/2 • อ่านอย่างเดียว\",\n              \"size\": \"sm\",\n              \"color\": \"#6B7280\"\n            },\n\n            {\n              \"type\": \"box\",\n              \"layout\": \"vertical\",\n              \"margin\": \"md\",\n              \"paddingAll\": \"14px\",\n              \"backgroundColor\": \"#FFFFFF\",\n              \"cornerRadius\": \"14px\",\n              \"contents\": [\n                {\n                  \"type\": \"text\",\n                  \"text\": \"✅ รูปแบบการพิมพ์\",\n                  \"weight\": \"bold\",\n                  \"size\": \"sm\",\n                  \"color\": \"#111111\"\n                },\n                {\n                  \"type\": \"text\",\n                  \"text\": \"จ่าย/รับ [จำนวนเงิน] [รายการ] [วิธีจ่าย]\",\n                  \"size\": \"sm\",\n                  \"wrap\": true,\n                  \"color\": \"#374151\",\n                  \"margin\": \"sm\"\n                }\n              ]\n            },\n\n            {\n              \"type\": \"text\",\n              \"text\": \"ตัวอย่างแต่ละหมวดหมู่\",\n              \"size\": \"sm\",\n              \"weight\": \"bold\",\n              \"color\": \"#111111\",\n              \"margin\": \"md\"\n            },\n\n            {\n              \"type\": \"box\",\n              \"layout\": \"vertical\",\n              \"spacing\": \"sm\",\n              \"contents\": [\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"🍜\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"อาหาร\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"จ่าย 80 ข้าวกะเพรา เงินสด\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"⚡\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"ค่าสาธารณูปโภค\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"จ่าย 1200 ค่าไฟ PEA โอน\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"🚕\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"เดินทาง\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"จ่าย 60 รถเมล์ อื่นๆ\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"🧻\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"ของใช้ส่วนตัว\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"จ่าย 95 ทิชชู่ บัตรเดบิต\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"🗂️\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"อื่นๆ\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"จ่าย 150 ค่าจิปาถะ อื่นๆ\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"💰\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"รายรับ\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"รับ 5000 งานพิเศษ บัตรเครดิต\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                }\n              ]\n            },\n\n            {\n              \"type\": \"box\",\n              \"layout\": \"vertical\",\n              \"margin\": \"md\",\n              \"paddingAll\": \"14px\",\n              \"backgroundColor\": \"#FFFFFF\",\n              \"cornerRadius\": \"14px\",\n              \"contents\": [\n                { \"type\": \"text\", \"text\": \"💳 วิธีการชำระเงิน (คำที่พิมพ์ได้)\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"vertical\",\n                  \"spacing\": \"sm\",\n                  \"margin\": \"sm\",\n                  \"contents\": [\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"horizontal\",\n                      \"spacing\": \"sm\",\n                      \"contents\": [\n                        {\n                          \"type\": \"box\",\n                          \"layout\": \"vertical\",\n                          \"flex\": 1,\n                          \"backgroundColor\": \"#EEF0F3\",\n                          \"cornerRadius\": \"999px\",\n                          \"paddingAll\": \"8px\",\n                          \"contents\": [{ \"type\": \"text\", \"text\": \"เงินสด\", \"size\": \"sm\", \"align\": \"center\", \"color\": \"#111111\" }]\n                        },\n                        {\n                          \"type\": \"box\",\n                          \"layout\": \"vertical\",\n                          \"flex\": 1,\n                          \"backgroundColor\": \"#EEF0F3\",\n                          \"cornerRadius\": \"999px\",\n                          \"paddingAll\": \"8px\",\n                          \"contents\": [{ \"type\": \"text\", \"text\": \"โอน\", \"size\": \"sm\", \"align\": \"center\", \"color\": \"#111111\" }]\n                        },\n                        {\n                          \"type\": \"box\",\n                          \"layout\": \"vertical\",\n                          \"flex\": 1,\n                          \"backgroundColor\": \"#EEF0F3\",\n                          \"cornerRadius\": \"999px\",\n                          \"paddingAll\": \"8px\",\n                          \"contents\": [{ \"type\": \"text\", \"text\": \"บัตรเครดิต\", \"size\": \"sm\", \"align\": \"center\", \"color\": \"#111111\" }]\n                        }\n                      ]\n                    },\n\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"horizontal\",\n                      \"spacing\": \"sm\",\n                      \"contents\": [\n                        {\n                          \"type\": \"box\",\n                          \"layout\": \"vertical\",\n                          \"flex\": 1,\n                          \"backgroundColor\": \"#EEF0F3\",\n                          \"cornerRadius\": \"999px\",\n                          \"paddingAll\": \"8px\",\n                          \"contents\": [{ \"type\": \"text\", \"text\": \"บัตรเดบิต\", \"size\": \"sm\", \"align\": \"center\", \"color\": \"#111111\" }]\n                        },\n                        {\n                          \"type\": \"box\",\n                          \"layout\": \"vertical\",\n                          \"flex\": 1,\n                          \"backgroundColor\": \"#EEF0F3\",\n                          \"cornerRadius\": \"999px\",\n                          \"paddingAll\": \"8px\",\n                          \"contents\": [{ \"type\": \"text\", \"text\": \"อื่นๆ\", \"size\": \"sm\", \"align\": \"center\", \"color\": \"#111111\" }]\n                        },\n                        { \"type\": \"box\", \"layout\": \"vertical\", \"flex\": 1, \"contents\": [] }\n                      ]\n                    }\n                  ]\n                }\n              ]\n            },\n\n            {\n              \"type\": \"text\",\n              \"text\": \"(หมายเหตุ: หน้านี้เป็นตัวอย่าง ไม่ต้องกดปุ่มหมวด)\",\n              \"size\": \"xs\",\n              \"wrap\": true,\n              \"color\": \"#9CA3AF\",\n              \"margin\": \"md\"\n            }\n          ]\n        },\n\n        \"footer\": {\n          \"type\": \"box\",\n          \"layout\": \"vertical\",\n          \"spacing\": \"sm\",\n          \"paddingAll\": \"16px\",\n          \"contents\": [\n            {\n              \"type\": \"button\",\n              \"style\": \"primary\",\n              \"color\": \"#16A34A\",\n              \"height\": \"md\",\n              \"action\": { \"type\": \"message\", \"label\": \"หน้าถัดไป\", \"text\": \"หน้าถัดไป\" }\n            },\n            {\n              \"type\": \"button\",\n              \"style\": \"secondary\",\n              \"height\": \"md\",\n              \"action\": { \"type\": \"message\", \"label\": \"เมนู\", \"text\": \"เมนู\" }\n            }\n          ]\n        }\n      }\n    }\n  ]\n}",
+        "options": {}
+      },
+      "name": "HTTP Request → LINE Reply1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1984,
+        -1088
+      ],
+      "id": "ccb7e705-f4d7-446c-a3e0-6e1ccda4c652"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer 0UU2lcwKEZ0t1bhkbXmmyI+h2lWM7Mvo4QZEdbKYIasvO0/FMomBjUttilNtj3TuVErlSgr8pIE/7K20HkhUqoggfXwNFgfWRHsmZoea9qsA5cG4AuroXvIdGVnLeJ1V6OKs+oFKh5Q1LnbEBJMNFwdB04t89/1O/w1cDnyilFU="
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"replyToken\": \"{{$json.replyToken}}\",\n  \"messages\": [\n    {\n      \"type\": \"flex\",\n      \"altText\": \"สรุป & คำสั่ง\",\n      \"contents\": {\n        \"type\": \"bubble\",\n        \"size\": \"mega\",\n        \"body\": {\n          \"type\": \"box\",\n          \"layout\": \"vertical\",\n          \"spacing\": \"lg\",\n          \"contents\": [\n            {\n              \"type\": \"text\",\n              \"text\": \"สรุป & คำสั่ง\",\n              \"weight\": \"bold\",\n              \"size\": \"lg\",\n              \"color\": \"#111827\"\n            },\n            {\n              \"type\": \"text\",\n              \"text\": \"เลือกเมนูที่ต้องการ\",\n              \"size\": \"sm\",\n              \"color\": \"#6B7280\"\n            },\n\n            {\n              \"type\": \"box\",\n              \"layout\": \"vertical\",\n              \"margin\": \"lg\",\n              \"spacing\": \"md\",\n              \"contents\": [\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"spacing\": \"md\",\n                  \"contents\": [\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"paddingAll\": \"14px\",\n                      \"cornerRadius\": \"16px\",\n                      \"backgroundColor\": \"#16A34A\",\n                      \"action\": { \"type\": \"message\", \"label\": \"สรุปวันนี้\", \"text\": \"สรุปวันนี้\" },\n                      \"contents\": [\n                        {\n                          \"type\": \"image\",\n                          \"url\": \"https://cdn-icons-png.flaticon.com/512/747/747310.png\",\n                          \"size\": \"28px\",\n                          \"align\": \"center\"\n                        },\n                        {\n                          \"type\": \"text\",\n                          \"text\": \"สรุปวันนี้\",\n                          \"align\": \"center\",\n                          \"size\": \"sm\",\n                          \"weight\": \"bold\",\n                          \"color\": \"#FFFFFF\",\n                          \"margin\": \"sm\"\n                        }\n                      ],\n                      \"flex\": 1\n                    },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"paddingAll\": \"14px\",\n                      \"cornerRadius\": \"16px\",\n                      \"backgroundColor\": \"#16A34A\",\n                      \"action\": { \"type\": \"message\", \"label\": \"สรุปเมื่อวาน\", \"text\": \"สรุปเมื่อวาน\" },\n                      \"contents\": [\n                        {\n                          \"type\": \"image\",\n                          \"url\": \"https://cdn-icons-png.flaticon.com/512/747/747376.png\",\n                          \"size\": \"28px\",\n                          \"align\": \"center\"\n                        },\n                        {\n                          \"type\": \"text\",\n                          \"text\": \"สรุปเมื่อวาน\",\n                          \"align\": \"center\",\n                          \"size\": \"sm\",\n                          \"weight\": \"bold\",\n                          \"color\": \"#FFFFFF\",\n                          \"margin\": \"sm\"\n                        }\n                      ],\n                      \"flex\": 1\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"spacing\": \"md\",\n                  \"contents\": [\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"paddingAll\": \"14px\",\n                      \"cornerRadius\": \"16px\",\n                      \"backgroundColor\": \"#16A34A\",\n                      \"action\": { \"type\": \"message\", \"label\": \"สรุปเดือนนี้\", \"text\": \"สรุปเดือนนี้\" },\n                      \"contents\": [\n                        {\n                          \"type\": \"image\",\n                          \"url\": \"https://cdn-icons-png.flaticon.com/512/1828/1828884.png\",\n                          \"size\": \"28px\",\n                          \"align\": \"center\"\n                        },\n                        {\n                          \"type\": \"text\",\n                          \"text\": \"สรุปเดือนนี้\",\n                          \"align\": \"center\",\n                          \"size\": \"sm\",\n                          \"weight\": \"bold\",\n                          \"color\": \"#FFFFFF\",\n                          \"margin\": \"sm\"\n                        }\n                      ],\n                      \"flex\": 1\n                    },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"paddingAll\": \"14px\",\n                      \"cornerRadius\": \"16px\",\n                      \"backgroundColor\": \"#E5E7EB\",\n                      \"action\": { \"type\": \"message\", \"label\": \"วิธีพิมพ์\", \"text\": \"help\" },\n                      \"contents\": [\n                        {\n                          \"type\": \"image\",\n                          \"url\": \"https://cdn-icons-png.flaticon.com/512/1828/1828919.png\",\n                          \"size\": \"28px\",\n                          \"align\": \"center\"\n                        },\n                        {\n                          \"type\": \"text\",\n                          \"text\": \"วิธีพิมพ์\",\n                          \"align\": \"center\",\n                          \"size\": \"sm\",\n                          \"weight\": \"bold\",\n                          \"color\": \"#111827\",\n                          \"margin\": \"sm\"\n                        }\n                      ],\n                      \"flex\": 1\n                    }\n                  ]\n                }\n              ]\n            },\n\n            {\n              \"type\": \"separator\",\n              \"margin\": \"lg\"\n            }\n          ]\n        },\n\n\"footer\": {\n  \"type\": \"box\",\n  \"layout\": \"vertical\",\n  \"paddingAll\": \"0px\",\n  \"spacing\": \"none\",\n  \"contents\": [\n    {\n      \"type\": \"button\",\n      \"style\": \"primary\",\n      \"color\": \"#16A34A\",\n      \"height\": \"md\",\n      \"action\": {\n        \"type\": \"message\",\n        \"label\": \"กลับหน้าแรก\",\n        \"text\": \"กลับหน้าแรก\"\n      }\n    }\n  ]\n}\n      }\n    }\n  ]\n}",
+        "options": {}
+      },
+      "name": "HTTP Request → LINE Reply3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2000,
+        -1552
+      ],
+      "id": "a30b12cb-6e7b-4db4-a63e-8c61645e994c"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer 0UU2lcwKEZ0t1bhkbXmmyI+h2lWM7Mvo4QZEdbKYIasvO0/FMomBjUttilNtj3TuVErlSgr8pIE/7K20HkhUqoggfXwNFgfWRHsmZoea9qsA5cG4AuroXvIdGVnLeJ1V6OKs+oFKh5Q1LnbEBJMNFwdB04t89/1O/w1cDnyilFU="
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"replyToken\": \"{{$json.replyToken}}\",\n  \"messages\": [\n    {\n      \"type\": \"flex\",\n      \"altText\": \"หน้า 1/2 : ตัวอย่างบันทึก\",\n      \"contents\": {\n        \"type\": \"bubble\",\n        \"size\": \"giga\",\n        \"styles\": {\n          \"body\": { \"backgroundColor\": \"#F6F7F9\" },\n          \"footer\": { \"backgroundColor\": \"#F6F7F9\" }\n        },\n        \"body\": {\n          \"type\": \"box\",\n          \"layout\": \"vertical\",\n          \"spacing\": \"md\",\n          \"paddingAll\": \"16px\",\n          \"contents\": [\n            {\n              \"type\": \"text\",\n              \"text\": \"ตัวอย่างบันทึก\",\n              \"weight\": \"bold\",\n              \"size\": \"xl\",\n              \"color\": \"#111111\"\n            },\n            {\n              \"type\": \"text\",\n              \"text\": \"หน้า 1/2 • อ่านอย่างเดียว\",\n              \"size\": \"sm\",\n              \"color\": \"#6B7280\"\n            },\n\n            {\n              \"type\": \"box\",\n              \"layout\": \"vertical\",\n              \"margin\": \"md\",\n              \"paddingAll\": \"14px\",\n              \"backgroundColor\": \"#FFFFFF\",\n              \"cornerRadius\": \"14px\",\n              \"contents\": [\n                {\n                  \"type\": \"text\",\n                  \"text\": \"✅ รูปแบบการพิมพ์\",\n                  \"weight\": \"bold\",\n                  \"size\": \"sm\",\n                  \"color\": \"#111111\"\n                },\n                {\n                  \"type\": \"text\",\n                  \"text\": \"จ่าย/รับ [จำนวนเงิน] [รายการ] [วิธีจ่าย]\",\n                  \"size\": \"sm\",\n                  \"wrap\": true,\n                  \"color\": \"#374151\",\n                  \"margin\": \"sm\"\n                }\n              ]\n            },\n\n            {\n              \"type\": \"text\",\n              \"text\": \"ตัวอย่างแต่ละหมวดหมู่\",\n              \"size\": \"sm\",\n              \"weight\": \"bold\",\n              \"color\": \"#111111\",\n              \"margin\": \"md\"\n            },\n\n            {\n              \"type\": \"box\",\n              \"layout\": \"vertical\",\n              \"spacing\": \"sm\",\n              \"contents\": [\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"🍜\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"อาหาร\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"จ่าย 80 ข้าวกะเพรา เงินสด\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"⚡\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"ค่าสาธารณูปโภค\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"จ่าย 1200 ค่าไฟ PEA โอน\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"🚕\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"เดินทาง\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"จ่าย 60 รถเมล์ อื่นๆ\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"🧻\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"ของใช้ส่วนตัว\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"จ่าย 95 ทิชชู่ บัตรเดบิต\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"🗂️\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"อื่นๆ\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"จ่าย 150 ค่าจิปาถะ อื่นๆ\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"horizontal\",\n                  \"paddingAll\": \"14px\",\n                  \"backgroundColor\": \"#FFFFFF\",\n                  \"cornerRadius\": \"14px\",\n                  \"contents\": [\n                    { \"type\": \"text\", \"text\": \"💰\", \"size\": \"xl\", \"flex\": 0 },\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"vertical\",\n                      \"margin\": \"md\",\n                      \"contents\": [\n                        { \"type\": \"text\", \"text\": \"รายรับ\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n                        { \"type\": \"text\", \"text\": \"รับ 5000 งานพิเศษ บัตรเครดิต\", \"size\": \"sm\", \"color\": \"#6B7280\", \"wrap\": true, \"margin\": \"xs\" }\n                      ]\n                    }\n                  ]\n                }\n              ]\n            },\n\n            {\n              \"type\": \"box\",\n              \"layout\": \"vertical\",\n              \"margin\": \"md\",\n              \"paddingAll\": \"14px\",\n              \"backgroundColor\": \"#FFFFFF\",\n              \"cornerRadius\": \"14px\",\n              \"contents\": [\n                { \"type\": \"text\", \"text\": \"💳 วิธีการชำระเงิน (คำที่พิมพ์ได้)\", \"weight\": \"bold\", \"size\": \"sm\", \"color\": \"#111111\" },\n\n                {\n                  \"type\": \"box\",\n                  \"layout\": \"vertical\",\n                  \"spacing\": \"sm\",\n                  \"margin\": \"sm\",\n                  \"contents\": [\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"horizontal\",\n                      \"spacing\": \"sm\",\n                      \"contents\": [\n                        {\n                          \"type\": \"box\",\n                          \"layout\": \"vertical\",\n                          \"flex\": 1,\n                          \"backgroundColor\": \"#EEF0F3\",\n                          \"cornerRadius\": \"999px\",\n                          \"paddingAll\": \"8px\",\n                          \"contents\": [{ \"type\": \"text\", \"text\": \"เงินสด\", \"size\": \"sm\", \"align\": \"center\", \"color\": \"#111111\" }]\n                        },\n                        {\n                          \"type\": \"box\",\n                          \"layout\": \"vertical\",\n                          \"flex\": 1,\n                          \"backgroundColor\": \"#EEF0F3\",\n                          \"cornerRadius\": \"999px\",\n                          \"paddingAll\": \"8px\",\n                          \"contents\": [{ \"type\": \"text\", \"text\": \"โอน\", \"size\": \"sm\", \"align\": \"center\", \"color\": \"#111111\" }]\n                        },\n                        {\n                          \"type\": \"box\",\n                          \"layout\": \"vertical\",\n                          \"flex\": 1,\n                          \"backgroundColor\": \"#EEF0F3\",\n                          \"cornerRadius\": \"999px\",\n                          \"paddingAll\": \"8px\",\n                          \"contents\": [{ \"type\": \"text\", \"text\": \"บัตรเครดิต\", \"size\": \"sm\", \"align\": \"center\", \"color\": \"#111111\" }]\n                        }\n                      ]\n                    },\n\n                    {\n                      \"type\": \"box\",\n                      \"layout\": \"horizontal\",\n                      \"spacing\": \"sm\",\n                      \"contents\": [\n                        {\n                          \"type\": \"box\",\n                          \"layout\": \"vertical\",\n                          \"flex\": 1,\n                          \"backgroundColor\": \"#EEF0F3\",\n                          \"cornerRadius\": \"999px\",\n                          \"paddingAll\": \"8px\",\n                          \"contents\": [{ \"type\": \"text\", \"text\": \"บัตรเดบิต\", \"size\": \"sm\", \"align\": \"center\", \"color\": \"#111111\" }]\n                        },\n                        {\n                          \"type\": \"box\",\n                          \"layout\": \"vertical\",\n                          \"flex\": 1,\n                          \"backgroundColor\": \"#EEF0F3\",\n                          \"cornerRadius\": \"999px\",\n                          \"paddingAll\": \"8px\",\n                          \"contents\": [{ \"type\": \"text\", \"text\": \"อื่นๆ\", \"size\": \"sm\", \"align\": \"center\", \"color\": \"#111111\" }]\n                        },\n                        { \"type\": \"box\", \"layout\": \"vertical\", \"flex\": 1, \"contents\": [] }\n                      ]\n                    }\n                  ]\n                }\n              ]\n            },\n\n            {\n              \"type\": \"text\",\n              \"text\": \"(หมายเหตุ: หน้านี้เป็นตัวอย่าง ไม่ต้องกดปุ่มหมวด)\",\n              \"size\": \"xs\",\n              \"wrap\": true,\n              \"color\": \"#9CA3AF\",\n              \"margin\": \"md\"\n            }\n          ]\n        },\n\n        \"footer\": {\n          \"type\": \"box\",\n          \"layout\": \"vertical\",\n          \"spacing\": \"sm\",\n          \"paddingAll\": \"16px\",\n          \"contents\": [\n            {\n              \"type\": \"button\",\n              \"style\": \"primary\",\n              \"color\": \"#16A34A\",\n              \"height\": \"md\",\n              \"action\": { \"type\": \"message\", \"label\": \"หน้าถัดไป\", \"text\": \"หน้าถัดไป\" }\n            },\n            {\n              \"type\": \"button\",\n              \"style\": \"secondary\",\n              \"height\": \"md\",\n              \"action\": { \"type\": \"message\", \"label\": \"เมนู\", \"text\": \"เมนู\" }\n            }\n          ]\n        }\n      }\n    }\n  ]\n}\n",
+        "options": {}
+      },
+      "name": "HTTP Request → LINE Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2624,
+        -432
+      ],
+      "id": "e9967683-285f-40ab-b389-4aa0a82351fe"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target-GS-Append)').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1936
+      ],
+      "id": "2782b11f-378a-4149-a9ae-325557b13c4a",
+      "name": "LineMessaging-SendMessage-GS-Append1",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Build LINE Message-GS-Append\n\nconst input = $json ?? {};\n\n// ---------- helper: format date/time Thai ----------\nfunction toBangkokParts(tsRaw) {\n  // รองรับ epoch sec/ms และ ISO string\n  let d;\n  if (typeof tsRaw === \"number\") {\n    const ms = tsRaw < 1e12 ? tsRaw * 1000 : tsRaw;\n    d = new Date(ms);\n  } else if (typeof tsRaw === \"string\" && tsRaw.trim()) {\n    const s = tsRaw.trim();\n    if (/^\\d+$/.test(s)) {\n      const n = Number(s);\n      const ms = n < 1e12 ? n * 1000 : n;\n      d = new Date(ms);\n    } else {\n      d = new Date(s);\n    }\n  } else {\n    d = new Date();\n  }\n\n  const date = new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    day: \"2-digit\",\n    month: \"2-digit\",\n    year: \"numeric\",\n  }).format(d);\n\n  const time = new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    hour: \"2-digit\",\n    minute: \"2-digit\",\n    hour12: false,\n  }).format(d);\n\n  return { date, time };\n}\n\nfunction numFmt(v) {\n  const n = typeof v === \"number\" ? v : Number(String(v ?? \"\").replace(/,/g, \"\"));\n  if (!Number.isFinite(n)) return String(v ?? \"\").trim();\n  return n.toLocaleString(\"th-TH\");\n}\n\n// ---------- pick fields ----------\nconst tsRaw = input.ts ?? input.timestamp ?? input.event?.timestamp ?? input.time ?? input.ts_utc ?? null;\nconst { date, time } = toBangkokParts(tsRaw);\n\nconst type = (input.type ?? \"\").toLowerCase();\nconst typeLabel = type === \"income\" ? \"รายรับ\" : \"รายจ่าย\";\nconst typeIcon = type === \"income\" ? \"💰\" : \"💸\";\n\nconst category = input.category ?? \"-\";\nconst note = input.note ?? \"-\";\nconst amount = input.amount ?? \"\";\nconst payment = input.payment ?? \"-\";\n\n// ถ้า amount ว่าง ให้ไม่โชว์เลข (กันข้อความหลุด)\nconst amountLine = amount !== \"\" ? `💰 จำนวน: ${numFmt(amount)} บาท` : `💰 จำนวน: -`;\n\n// ---------- build message ----------\nconst lineText = [\n  \"✅ บันทึกรายการสำเร็จ\",\n  \"\",\n  `📅 ${date} ${time} น.`,\n  `${typeIcon} ${typeLabel}`,\n  `🏷 หมวด: ${category}`,\n  `📝 รายการ: ${note}`,\n  amountLine,\n  `💳 ชำระ: ${payment}`,\n  \"\",\n  \"📊 บันทึกลงระบบเรียบร้อย\",\n].join(\"\\n\");\n\n// กันกรณี \\n เป็นตัวหนังสือ\nconst safeLineText = String(lineText)\n  .replace(/\\\\n/g, \"\\n\")\n  .replace(/\\r\\n/g, \"\\n\");\n\nreturn [\n  {\n    json: {\n      lineText: safeLineText,\n    },\n  },\n];\n"
+      },
+      "id": "6e15a6f2-3b46-4712-b064-340fe5d7834b",
+      "name": "Code | Build LINE Message-GS-Append1",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -688,
+        -16
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook (LINE)": {
+      "main": [
+        [
+          {
+            "node": "Fn: Extract LINE Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Extract LINE Event": {
+      "main": [
+        [
+          {
+            "node": "IF: Has Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Event": {
+      "main": [
+        [
+          {
+            "node": "Fn: Parse Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Fn: Parse Message": {
+      "main": [
+        [
+          {
+            "node": "IF | Check Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Transaction": {
+      "main": [
+        [
+          {
+            "node": "GS: Lookup row_key",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "GS: Lookup row_key": {
+      "main": [
+        [
+          {
+            "node": "IF: Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Code | Build LINE Message-GS-No-Append",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code: Prepare For Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS: Append Transaction": {
+      "main": [
+        [
+          {
+            "node": "Code | Build LINE Message-GS-Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prepare For Sheet": {
+      "main": [
+        [
+          {
+            "node": "GS: Append Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-GS-Append)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-GS-Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-GS-Append": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-GS-Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build LINE Message-GS-Append": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-GS-Append)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build LINE Message-GS-No-Append": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-GS-No-Append)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-GS-No-Append)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-GS-No-Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-GS-No-Append": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-GS-No-Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Summary Today?": {
+      "main": [
+        [
+          {
+            "node": "Code | Build Today Filters",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF: Is Summary Yesterday?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build Today Filters": {
+      "main": [
+        [
+          {
+            "node": "GS: Read Today Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS: Read Today Rows": {
+      "main": [
+        [
+          {
+            "node": "Code: Summarize Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Summarize Today": {
+      "main": [
+        [
+          {
+            "node": "Code: Build LINE Message-SummaryToday",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build LINE Message-SummaryToday": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-Sum-Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-Sum-Today": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Sum-Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Sum-Today": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-Sum-Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Summary Month?": {
+      "main": [
+        [
+          {
+            "node": "Code | Build Month Filters",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF: Is Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build Month Filters": {
+      "main": [
+        [
+          {
+            "node": "GS: Read Month Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS: Read Month Rows": {
+      "main": [
+        [
+          {
+            "node": "Code: Summarize Monthly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build LINE Message-Summary-Monthly": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-Sum-Monthly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Summarize Monthly": {
+      "main": [
+        [
+          {
+            "node": "Code: Build LINE Message-Summary-Monthly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-Sum-Monthly": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Sum-Monthly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Sum-Monthly": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-Sum-Monthly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Summary Yesterday?": {
+      "main": [
+        [
+          {
+            "node": "Code | Build Yesterday Filters",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF: Is Summary Month?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build Yesterday Filters": {
+      "main": [
+        [
+          {
+            "node": "GS: Read Yesterday Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS: Read Yesterday Rows": {
+      "main": [
+        [
+          {
+            "node": "IF: Has Yesterday Rows?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build LINE Message-SummaryYesterday": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-Sum-Yesterday",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-Sum-Yesterday": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Sum-Yesterday",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Sum-Yesterday": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-Sum-Yesterday",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code:  Summarize Yesterday": {
+      "main": [
+        [
+          {
+            "node": "Code: Build LINE Message-SummaryYesterday",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Yesterday Rows?": {
+      "main": [
+        [
+          {
+            "node": "Code:  Summarize Yesterday",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code: Build LINE Message-NoDataYesterday",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-Sum-Yesterday1": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Sum-Yesterday1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Sum-Yesterday1": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-Sum-Yesterday1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build LINE Message-NoDataYesterday": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-Sum-Yesterday1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF | Check Mode": {
+      "main": [
+        [
+          {
+            "node": "IF | Menu Page?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF: Is Summary Today?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF | Menu Page?": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target)2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set (LINE Target)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target)2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request → LINE Reply2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target)1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request → LINE Reply1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "66825e63-776b-4506-b3cb-2a0f0a768d29",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6e8bd4e6dcfe2d257f6d9648f4efaf76882daef04e1402d554d9aae9132bba97"
+  },
+  "id": "FWr93W3bywInECIv",
+  "tags": []
+}
