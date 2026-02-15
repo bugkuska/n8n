@@ -1,0 +1,1651 @@
+{
+  "name": "02-LINE-Finance-Logger-Daily-Weekly-Monthly-Report(Sheets)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "25dbc1e0-a525-46e1-a0a4-ce0dca63bf78",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "a5821669-f591-4117-a50f-83d638c89bee",
+      "name": "Webhook (LINE)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2128,
+        -800
+      ],
+      "webhookId": "25dbc1e0-a525-46e1-a0a4-ce0dca63bf78"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nExtract LINE Messaging API payload fields from n8n Webhook node.\nWebhook output shape:\n{\n  headers, params, query,\n  body: { destination, events:[...] },\n  webhookUrl, executionMode\n}\n*/\n\nconst payload = $json.body;          // ✅ จุดที่ต้องแก้\nconst evt = payload?.events?.[0];\n\nif (!evt) {\n  return [{ json: { ok: false, error: 'No events[0] in body', payload } }];\n}\n\nconst text = evt?.message?.text ?? '';\nconst messageId = evt?.message?.id ?? '';\nconst timestamp = evt?.timestamp ?? Date.now();\n\nconst source = evt?.source ?? {};\nconst userId = source.userId ?? '';\nconst groupId = source.groupId ?? '';\nconst roomId = source.roomId ?? '';\n\nconst replyToken = evt?.replyToken ?? '';\n\n// group > room > user\nconst scopeId = groupId || roomId || userId;\n\nreturn [{\n  json: {\n    ok: true,\n    text,\n    messageId,\n    timestamp,\n    replyToken,\n    userId,\n    groupId,\n    roomId,\n    scopeId,\n    eventType: evt.type,\n    messageType: evt?.message?.type ?? ''\n  }\n}];"
+      },
+      "id": "571c4fbb-7287-4f6c-9367-ae4901d887ad",
+      "name": "Fn: Extract LINE Event",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1920,
+        -800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f64badd7-870b-454d-96e1-630fb2626f69",
+              "leftValue": "={{$json.ok}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4f0a74e2-7cb3-477a-9632-080711f0cfad",
+      "name": "IF: Has Event",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1936,
+        -592
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/**\n * Fn: Parse Message (B: content-hash row_key)\n * - row_key = hash(user/scope + date + type + amount + category + note + payment)\n * - messageId เก็บไว้ใน $json.messageId (ไว้ดู log/trace ได้)\n */\n\nconst textRaw = String($json.text ?? '').trim();\nconst text = textRaw.replace(/\\s+/g, ' ').trim();\nconst lower = text.toLowerCase();\n\n// ดึง messageId จากหลายชื่อที่อาจเจอ\nconst messageId =\n  String($json.messageId ?? $json.messageid ?? $json.message_id ?? '').trim()\n  || String($json.timestamp ?? Date.now()); // fallback กันว่าง\n\nif (!text) {\n  $json.mode = 'unknown';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\n\n// commands\nif (lower === 'help' || lower === '/help') {\n  $json.mode = 'help';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\nif (lower === 'today' || lower === 'วันนี้') {\n  $json.mode = 'today';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\n\n// detect type (รับ/จ่าย or +/-)\nlet type = null;\nlet rest = text;\n\nif (rest.startsWith('รับ')) {\n  type = 'income';\n  rest = rest.replace(/^รับ\\s*/, '');\n} else if (rest.startsWith('จ่าย')) {\n  type = 'expense';\n  rest = rest.replace(/^จ่าย\\s*/, '');\n} else if (rest.startsWith('+')) {\n  type = 'income';\n  rest = rest.slice(1).trim();\n} else if (rest.startsWith('-')) {\n  type = 'expense';\n  rest = rest.slice(1).trim();\n}\n\nif (!type) {\n  $json.mode = 'unknown';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\n\n// remove optional \"เงิน\"\nrest = rest.replace(/^เงิน\\s*/i, '').trim();\n\n// parse amount\nconst m = rest.match(/^([0-9,]+(?:\\.[0-9]+)?)\\s*(.*)$/);\nif (!m) {\n  $json.mode = 'unknown';\n  $json.messageId = messageId;\n  $json.raw_text = textRaw;\n  return [{ json: $json }];\n}\n\nconst amount = Number(String(m[1]).replace(/,/g, ''));\nlet tail = (m[2] ?? '').trim();\nif (!tail) tail = 'อื่นๆ';\n\n// payment map\nlet payment = '';\nconst payMap = new Map([\n  ['เงินสด', 'เงินสด'],\n  ['สด', 'เงินสด'],\n  ['โอน', 'โอน'],\n  ['โอนเงิน', 'โอน'],\n  ['promptpay', 'พร้อมเพย์'],\n  ['พร้อมเพย์', 'พร้อมเพย์'],\n  ['พร้อมเพ', 'พร้อมเพย์'],\n  ['pp', 'พร้อมเพย์'],\n  ['บัตร', 'บัตร'],\n  ['บัตรเครดิต', 'บัตรเครดิต'],\n  ['เครดิต', 'บัตรเครดิต'],\n  ['เดบิต', 'บัตรเดบิต'],\n]);\n\nlet tokens = tail.split(' ').filter(Boolean);\n\n// ตรวจ payment จากท้าย 1-2 คำ\nfor (let i = Math.max(0, tokens.length - 2); i < tokens.length; i++) {\n  const key = String(tokens[i] ?? '').toLowerCase();\n  if (payMap.has(key)) {\n    payment = payMap.get(key);\n    tokens.splice(i);\n    break;\n  }\n}\nif (!payment && tokens.length >= 2) {\n  const last2 = `${tokens[tokens.length - 2]} ${tokens[tokens.length - 1]}`.toLowerCase();\n  if (last2 === 'บัตร เครดิต') {\n    payment = 'บัตรเครดิต';\n    tokens.splice(tokens.length - 2);\n  } else if (last2 === 'บัตร เดบิต') {\n    payment = 'บัตรเดบิต';\n    tokens.splice(tokens.length - 2);\n  }\n}\n\ntail = tokens.join(' ').trim();\nif (!tail) tail = 'อื่นๆ';\n\n// category + note\nconst parts = tail.split(' ').filter(Boolean);\nconst category = (parts.shift() ?? 'อื่นๆ').trim() || 'อื่นๆ';\nconst note = parts.join(' ').trim();\n\n// time fields\nconst tsObj = new Date($json.timestamp ?? Date.now());\nconst pad = (n) => String(n).padStart(2, '0');\nconst date = `${tsObj.getFullYear()}-${pad(tsObj.getMonth() + 1)}-${pad(tsObj.getDate())}`;\nconst month = `${tsObj.getFullYear()}-${pad(tsObj.getMonth() + 1)}`;\nconst ts = tsObj.toISOString();\n\n// scope/user id\nconst scopeId = String($json.scopeId ?? $json.scopeid ?? $json.userId ?? $json.userid ?? '').trim();\n\n// ✅ แบบ B: content-hash (ไม่ใช้ messageId)\nconst baseKey = `${scopeId}|${date}|${type}|${amount}|${category}|${note}|${payment}`;\n\n// djb2 hash\nlet h = 5381;\nfor (let i = 0; i < baseKey.length; i++) {\n  h = ((h << 5) + h) + baseKey.charCodeAt(i);\n  h >>>= 0;\n}\nconst row_key = `rk_${h.toString(16)}`;\n\n// OUTPUT\n$json.mode = 'log';\n$json.type = type;\n$json.amount = amount;\n$json.category = category;\n$json.note = note || '';\n$json.payment = payment || '';\n$json.date = date;\n$json.month = month;\n$json.ts = ts;\n\n$json.messageId = messageId;   // เก็บไว้ดู trace\n$json.row_key = row_key;       // ✅ กันซ้ำด้วย content-hash\n$json.raw_text = textRaw;\n\n$json.scopeId = scopeId || $json.scopeId;\n\nreturn [{ json: $json }];"
+      },
+      "id": "aeba6adf-3a24-4705-8f69-5c414578cbfa",
+      "name": "Fn: Parse Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1680,
+        -608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e0805f78-d590-488d-b1ae-e19b9f31128d",
+              "leftValue": "={{$json.mode}}",
+              "rightValue": "log",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d37a1bc5-5c13-43b5-85c3-ad75d5b33a4f",
+      "name": "IF: Is Transaction",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1168,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40",
+          "mode": "list",
+          "cachedResultName": "my_memo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "row_key",
+              "lookupValue": "={{$json.row_key}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f3be628f-e649-4153-b0c3-1399b99ff294",
+      "name": "GS: Lookup row_key",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -944,
+        -384
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "aC3dnZk38DhyTJHi",
+          "name": "Google Sheets account-bbMyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f5254144-b753-443c-9682-e0f99032b62b",
+              "leftValue": "={{ $json.row_number !== undefined && $json.row_number !== null && $json.row_number !== '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8d98b78a-9811-4bd2-9b69-427640b95565",
+      "name": "IF: Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        -384
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40",
+          "mode": "list",
+          "cachedResultName": "my_memo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ts": "={{$json.ts}}",
+            "date": "={{$json.date}}",
+            "month": "={{$json.month}}",
+            "userId": "={{$json.userId}}",
+            "source": "LINE",
+            "type": "={{$json.type}}",
+            "category": "={{$json.category}}",
+            "amount": "={{$json.amount}}",
+            "note": "={{$json.note}}",
+            "row_key": "={{$json.row_key}}",
+            "raw_text": "={{$json.raw_text}}",
+            "payment": "={{$json.payment}}",
+            "content_key": "={{$json.content_key}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "month",
+              "displayName": "month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "userId",
+              "displayName": "userId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "note",
+              "displayName": "note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payment",
+              "displayName": "payment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_key",
+              "displayName": "row_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "raw_text",
+              "displayName": "raw_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "content_key",
+              "displayName": "content_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ab825c21-a992-49fc-b979-170abc61a675",
+      "name": "GS: Append Transaction",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -544,
+        -160
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "aC3dnZk38DhyTJHi",
+          "name": "Google Sheets account-bbMyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40",
+          "mode": "list",
+          "cachedResultName": "my_memo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "37a0d307-bcea-4ec5-9272-ac927ed29f38",
+      "name": "GS: Read Transactions (Last 500)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -640,
+        912
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "aC3dnZk38DhyTJHi",
+          "name": "Google Sheets account-bbMyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "f96f68fd-fb5b-4c63-920c-d293ee7afb51",
+      "name": "IF: Command today",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1520,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nBuild date keys for today based on LINE timestamp.\n*/\nconst ts = new Date($json.timestamp);\nconst pad = (n) => String(n).padStart(2, '0');\nconst date = `${ts.getFullYear()}-${pad(ts.getMonth()+1)}-${pad(ts.getDate())}`;\n\nreturn [{ json: { ...$json, date } }];"
+      },
+      "id": "7f84d4a6-1cd1-44bb-8dd7-9a25e42e811a",
+      "name": "Fn: Today Key",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1088,
+        976
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nBuild LINE reply for today command.\n*/\nconst meta = $node['Fn: Today Key'].json;\nconst sum = $json;\n\nconst fmt = (n) => (Number(n) || 0).toLocaleString('th-TH');\n\nconst lines = [];\nlines.push(`📊 สรุปวันนี้ (${sum.date})`);\nlines.push(`รายรับ: ${fmt(sum.income)}`);\nlines.push(`รายจ่าย: ${fmt(sum.expense)}`);\nlines.push(`คงเหลือ: ${fmt(sum.net)} ${sum.net >= 0 ? '✅' : '⚠️'}`);\n\nreturn [{\n  json: {\n    replyToken: meta.replyToken,\n    messages: [{ type: 'text', text: lines.join('\\n') }]\n  }\n}];"
+      },
+      "id": "56841b7b-3b8b-4390-8f7f-32a7e0cb1ac7",
+      "name": "Fn: Build LINE Reply (Today)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        608,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nHelp reply.\n*/\nconst meta = $json;\n\nconst lines = [];\nlines.push('📌 วิธีใช้บันทึกรายรับ-รายจ่าย');\nlines.push('1) รายจ่าย: - 120 อาหาร ข้าวเที่ยง');\nlines.push('2) รายรับ: + 500 ขายของ กล้วยทอด');\nlines.push('3) ดูสรุปวันนี้: today');\n\nreturn [{\n  json: {\n    replyToken: meta.replyToken,\n    messages: [{ type: 'text', text: lines.join('\\n') }]\n  }\n}];"
+      },
+      "id": "0eb81520-e8de-42ae-aa30-68d322385245",
+      "name": "Fn: Build LINE Reply (Help)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1184,
+        1136
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.mode}}",
+              "operation": "equals",
+              "value2": "help"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a3de2f81-f2ea-4627-9eea-2d73e9714a36",
+      "name": "IF: Command help",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1456,
+        992
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nUnknown reply.\n*/\nconst meta = $json;\n\nconst lines = [];\nlines.push('⚠️ ผมยังไม่เข้าใจข้อความนี้');\nlines.push('พิมพ์ help เพื่อดูรูปแบบคำสั่ง');\n\nreturn [{\n  json: {\n    replyToken: meta.replyToken,\n    messages: [{ type: 'text', text: lines.join('\\n') }]\n  }\n}];"
+      },
+      "id": "b23741bd-317f-4973-8649-2a5100606fc3",
+      "name": "Fn: Build LINE Reply (Unknown)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1696,
+        1328
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "cdb5934d-75d5-4345-8dcf-1075c67d2951",
+      "name": "Cron: Daily 20:00",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 2,
+      "position": [
+        -1472,
+        1968
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "32ac09d3-c5a3-49f9-ada6-85a1015a723f",
+      "name": "Cron: Weekly Mon 08:00",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 2,
+      "position": [
+        -1472,
+        2112
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "810de52a-a093-41e2-9b9a-bb2feff3532b",
+      "name": "Cron: Monthly 1st 08:00",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 2,
+      "position": [
+        -1472,
+        2256
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        }
+      },
+      "id": "19be093d-8591-469f-8046-145a3e28f3dc",
+      "name": "GS: Read Transactions (Reports)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        -1184,
+        2112
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nBuild report based on trigger.\n- Daily: today\n- Weekly: last 7 days\n- Monthly: previous month\n\nENV:\n- LINE_PUSH_TO : userId/groupId/roomId\n\nAssumes row fields: date, type, amount, category, scopeId\n\nNOTE: This sends a single summary to LINE_PUSH_TO (one recipient).\n*/\n\nconst trigger = $node.name;\nconst now = new Date();\nconst pad = (n) => String(n).padStart(2, '0');\n\nfunction ymd(d){\n  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;\n}\nfunction ym(d){\n  return `${d.getFullYear()}-${pad(d.getMonth()+1)}`;\n}\n\nlet title = '';\nlet start = null;\nlet end = null;\n\nif (trigger.includes('Daily')) {\n  title = `📊 รายงานรายวัน (${ymd(now)})`;\n  start = new Date(now); start.setHours(0,0,0,0);\n  end = new Date(now); end.setHours(23,59,59,999);\n} else if (trigger.includes('Weekly')) {\n  const endD = new Date(now);\n  const startD = new Date(now);\n  startD.setDate(startD.getDate() - 7);\n  title = `🗓️ รายงานรายสัปดาห์ (${ymd(startD)} ถึง ${ymd(endD)})`;\n  start = startD; start.setHours(0,0,0,0);\n  end = endD; end.setHours(23,59,59,999);\n} else {\n  // Monthly: previous month\n  const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);\n  const lastPrev = new Date(firstThis.getTime() - 1);\n  const firstPrev = new Date(lastPrev.getFullYear(), lastPrev.getMonth(), 1);\n  title = `🧾 รายงานรายเดือน (${ym(firstPrev)})`;\n  start = firstPrev; start.setHours(0,0,0,0);\n  end = lastPrev; end.setHours(23,59,59,999);\n}\n\nlet income = 0;\nlet expense = 0;\nconst cat = {};\n\nfor (const item of items) {\n  const r = item.json;\n  const dateStr = String(r.date ?? r['date'] ?? '');\n  if (!dateStr) continue;\n  const d = new Date(dateStr + 'T00:00:00');\n  if (d < start || d > end) continue;\n\n  const type = String(r.type ?? r['type'] ?? '');\n  const amount = Number(r.amount ?? r['amount'] ?? 0);\n  const category = String(r.category ?? r['category'] ?? 'อื่นๆ');\n\n  if (type === 'income') income += amount;\n  if (type === 'expense') expense += amount;\n  if (type === 'expense') {\n    cat[category] = (cat[category] || 0) + amount;\n  }\n}\n\nconst net = income - expense;\n\n// top 5 expense categories\nconst top = Object.entries(cat)\n  .sort((a,b)=>b[1]-a[1])\n  .slice(0,5)\n  .map(([k,v]) => `- ${k}: ${(v||0).toLocaleString('th-TH')}`);\n\nconst fmt = (n) => (Number(n)||0).toLocaleString('th-TH');\n\nconst lines = [];\nlines.push(title);\nlines.push(`รายรับ: ${fmt(income)}`);\nlines.push(`รายจ่าย: ${fmt(expense)}`);\nlines.push(`คงเหลือ: ${fmt(net)} ${net>=0?'✅':'⚠️'}`);\nif (top.length) {\n  lines.push('หมวดที่จ่ายมากสุด:');\n  lines.push(top.join('\\n'));\n}\n\nreturn [{\n  json: {\n    to: $env.LINE_PUSH_TO,\n    messages: [{ type: 'text', text: lines.join('\\n') }]\n  }\n}];"
+      },
+      "id": "5796bfe8-b171-4142-b91e-678c2d249274",
+      "name": "Fn: Build Report (Daily/Weekly/Monthly)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -944,
+        2112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.line.me/v2/bot/message/push",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.LINE_CHANNEL_ACCESS_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "id": "e04d0a49-4ccf-4ce3-b292-56af83fcc648",
+      "name": "HTTP: LINE Push (Reports)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -704,
+        2112
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1424,
+        1776
+      ],
+      "id": "d35c91e6-6c60-4a3f-963d-74cafeb20110",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\nBuild LINE reply message for transaction logging.\n*/\n\nconst tx = $node['Fn: Parse Message'].json;\nconst sum = $json;\n\nconst fmt = (n) => (Number(n) || 0).toLocaleString('th-TH');\n\nconst typeLabel = tx.type === 'income' ? 'รายรับ' : 'รายจ่าย';\nconst sign = tx.type === 'income' ? '+' : '-';\n\nconst lines = [];\nlines.push(`✅ บันทึก${typeLabel} ${fmt(tx.amount)} บาท (${tx.category}) ${tx.note ? '“' + tx.note + '”' : ''}`);\nlines.push(`📅 วันนี้ (${sum.date})`);\nlines.push(`รายรับ: ${fmt(sum.income)} | รายจ่าย: ${fmt(sum.expense)} | คงเหลือ: ${fmt(sum.net)} (${sum.net >= 0 ? '✅' : '⚠️'})`);\n\nreturn [{\n  json: {\n    replyToken: tx.replyToken,\n    messages: [{ type: 'text', text: lines.join('\\n') }]\n  }\n}];"
+      },
+      "id": "a5c46cb0-6628-4ae0-bb7d-38a2b4fe5f90",
+      "name": "Fn: Build LINE Reply (Log)1",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1216,
+        1392
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-Help)1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        1328
+      ],
+      "id": "05c9a64c-3b6f-495e-addf-4012695be008",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        1328
+      ],
+      "id": "c923b796-d4bc-4de4-b4ca-0aec93f2ea1a",
+      "name": "LineMessageNode-Help1"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target-Help)1').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        1328
+      ],
+      "id": "91ddc183-8dff-4b98-8344-8db13f9c2d92",
+      "name": "LineMessaging-SendMessage-Help1",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "1a7XRqAPElUVvhoP",
+          "name": "Line Messaging Auth account-n8n-depa-trainning01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Code node: Prepare For Sheet (production-ready)\n * - รวมข้อมูลจาก \"Fn: Parse Message\" ให้เป็น $json ชุดเดียว\n * - สร้าง content_key ใน node นี้เลย (กันซ้ำตาม \"เนื้อหา\" ไม่ใช่ messageId)\n *\n * ต้องมี node ชื่อ: \"Fn: Parse Message\"\n */\n\nconst src = $node[\"Fn: Parse Message\"]?.json ?? {};\n\n// helper: normalize text (ลดช่องว่าง/ตัวพิมพ์/trim)\nconst norm = (v) =>\n  String(v ?? \"\")\n    .replace(/\\s+/g, \" \")\n    .trim()\n    .toLowerCase();\n\n// helper: safe number\nconst num = (v) => {\n  const n = Number(String(v ?? \"\").replace(/,/g, \"\"));\n  return Number.isFinite(n) ? n : 0;\n};\n\n// ดึง field หลักจาก parse\nconst ts = String(src.ts ?? new Date().toISOString());\nconst date = String(src.date ?? \"\");\nconst month = String(src.month ?? \"\");\nconst userId = String(src.scopeId ?? src.userId ?? \"\");\nconst source = \"LINE\";\n\nconst type = String(src.type ?? \"\");\nconst category = String(src.category ?? \"\");\nconst amount = num(src.amount);\nconst note = String(src.note ?? \"\");\nconst payment = String(src.payment ?? \"\");\nconst row_key = String(src.row_key ?? \"\");\nconst raw_text = String(src.raw_text ?? src.text ?? \"\");\n\n// ✅ content_key (กันซ้ำด้วย \"เนื้อหา\" + วัน + ผู้ใช้ + ประเภท + จำนวน + หมวด + โน้ต + วิธีจ่าย)\n// ถ้าต้องการให้ \"วันเดียวกัน+ข้อความเหมือนกัน\" ถือว่าซ้ำ -> ใช้แบบนี้ถูกต้อง\nconst content_key = [\n  norm(userId),\n  norm(date),\n  norm(type),\n  String(amount),\n  norm(category),\n  norm(note),\n  norm(payment),\n].join(\"|\");\n\nreturn [\n  {\n    json: {\n      ts,\n      date,\n      month,\n      userId,\n      source,\n      type,\n      category,\n      amount,\n      note,\n      payment,\n      row_key,\n      raw_text,\n      content_key,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        -160
+      ],
+      "id": "c2ab3af7-5729-49ea-bf74-f097d1c12289",
+      "name": "Code: Prepare For Sheet"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-GS-Append)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        -160
+      ],
+      "id": "32a89408-e48b-48cf-9b5b-287fbd808bf2",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        112,
+        -160
+      ],
+      "id": "23420799-3219-4c3b-93e0-8d8527ad54c1",
+      "name": "LineMessageNode-GS-Append"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target-GS-Append)').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        320,
+        -160
+      ],
+      "id": "7ee12b5f-bf8e-45f1-854f-348397024085",
+      "name": "LineMessaging-SendMessage-GS-Append",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Build LINE Message-GS-Append\n\nconst input = $json ?? {};\n\n// ---------- helper: format date/time Thai ----------\nfunction toBangkokParts(tsRaw) {\n  // รองรับ epoch sec/ms และ ISO string\n  let d;\n  if (typeof tsRaw === \"number\") {\n    const ms = tsRaw < 1e12 ? tsRaw * 1000 : tsRaw;\n    d = new Date(ms);\n  } else if (typeof tsRaw === \"string\" && tsRaw.trim()) {\n    const s = tsRaw.trim();\n    if (/^\\d+$/.test(s)) {\n      const n = Number(s);\n      const ms = n < 1e12 ? n * 1000 : n;\n      d = new Date(ms);\n    } else {\n      d = new Date(s);\n    }\n  } else {\n    d = new Date();\n  }\n\n  const date = new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    day: \"2-digit\",\n    month: \"2-digit\",\n    year: \"numeric\",\n  }).format(d);\n\n  const time = new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    hour: \"2-digit\",\n    minute: \"2-digit\",\n    hour12: false,\n  }).format(d);\n\n  return { date, time };\n}\n\nfunction numFmt(v) {\n  const n = typeof v === \"number\" ? v : Number(String(v ?? \"\").replace(/,/g, \"\"));\n  if (!Number.isFinite(n)) return String(v ?? \"\").trim();\n  return n.toLocaleString(\"th-TH\");\n}\n\n// ---------- pick fields ----------\nconst tsRaw = input.ts ?? input.timestamp ?? input.event?.timestamp ?? input.time ?? input.ts_utc ?? null;\nconst { date, time } = toBangkokParts(tsRaw);\n\nconst type = (input.type ?? \"\").toLowerCase();\nconst typeLabel = type === \"income\" ? \"รายรับ\" : \"รายจ่าย\";\nconst typeIcon = type === \"income\" ? \"💰\" : \"💸\";\n\nconst category = input.category ?? \"-\";\nconst note = input.note ?? \"-\";\nconst amount = input.amount ?? \"\";\nconst payment = input.payment ?? \"-\";\n\n// ถ้า amount ว่าง ให้ไม่โชว์เลข (กันข้อความหลุด)\nconst amountLine = amount !== \"\" ? `💰 จำนวน: ${numFmt(amount)} บาท` : `💰 จำนวน: -`;\n\n// ---------- build message ----------\nconst lineText = [\n  \"✅ บันทึกรายการสำเร็จ\",\n  \"\",\n  `📅 ${date} ${time} น.`,\n  `${typeIcon} ${typeLabel}`,\n  `🏷 หมวด: ${category}`,\n  `📝 รายการ: ${note}`,\n  amountLine,\n  `💳 ชำระ: ${payment}`,\n  \"\",\n  \"📊 บันทึกลงระบบเรียบร้อย\",\n].join(\"\\n\");\n\n// กันกรณี \\n เป็นตัวหนังสือ\nconst safeLineText = String(lineText)\n  .replace(/\\\\n/g, \"\\n\")\n  .replace(/\\r\\n/g, \"\\n\");\n\nreturn [\n  {\n    json: {\n      lineText: safeLineText,\n    },\n  },\n];\n"
+      },
+      "id": "25afbd99-20d0-4b9c-a8bf-b14fd8003426",
+      "name": "Code | Build LINE Message-GS-Append",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// n8n Function node (typeVersion: 1)\n// Node: Code | Build LINE Message-GS-No-Append\n// เวอร์ชันพร้อมใช้: ข้อความสวย + เวลาไทย + บอกว่า \"บันทึกไปแล้วเมื่อ ...\"\n// ต้องมี node ชื่อ \"GS: Lookup row_key\" อยู่ก่อนหน้า (Read/Lookup) เพื่อดึง ts รายการเดิม\n\nconst input = $json ?? {};\n\n// --------------------- helpers ---------------------\nfunction toBangkokParts(tsRaw) {\n  let d;\n\n  if (typeof tsRaw === \"number\") {\n    const ms = tsRaw < 1e12 ? tsRaw * 1000 : tsRaw;\n    d = new Date(ms);\n  } else if (typeof tsRaw === \"string\" && tsRaw.trim()) {\n    // รองรับ ISO เช่น ...Z หรือ \"YYYY-MM-DD HH:mm:ss\"\n    d = new Date(tsRaw.trim());\n  } else {\n    d = new Date();\n  }\n\n  const date = new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    day: \"2-digit\",\n    month: \"2-digit\",\n    year: \"numeric\",\n  }).format(d);\n\n  const time = new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    hour: \"2-digit\",\n    minute: \"2-digit\",\n    hour12: false,\n  }).format(d);\n\n  return { date, time };\n}\n\nfunction formatTimeOnly(tsRaw) {\n  if (!tsRaw) return null;\n  const d = new Date(tsRaw);\n  if (Number.isNaN(d.getTime())) return null;\n\n  return new Intl.DateTimeFormat(\"th-TH\", {\n    timeZone: \"Asia/Bangkok\",\n    hour: \"2-digit\",\n    minute: \"2-digit\",\n    hour12: false,\n  }).format(d);\n}\n\nfunction numFmt(v) {\n  const n = typeof v === \"number\" ? v : Number(String(v ?? \"\").replace(/,/g, \"\"));\n  if (!Number.isFinite(n)) return String(v ?? \"\").trim() || \"-\";\n  return n.toLocaleString(\"th-TH\");\n}\n\n// --------------------- current item fields ---------------------\nconst tsRaw = input.ts ?? input.timestamp ?? input.event?.timestamp ?? input.time ?? null;\nconst { date, time } = toBangkokParts(tsRaw);\n\nconst type = String(input.type ?? \"expense\").toLowerCase();\nconst typeLabel = type === \"income\" ? \"รายรับ\" : \"รายจ่าย\";\nconst typeIcon = type === \"income\" ? \"💰\" : \"💸\";\n\nconst category = input.category ?? \"-\";\nconst note = input.note ?? \"-\";\nconst amount = input.amount ?? \"\";\nconst payment = input.payment ?? \"-\";\n\nconst amountLine =\n  String(amount).trim() !== \"\" ? `💰 จำนวน: ${numFmt(amount)} บาท` : `💰 จำนวน: -`;\n\n// --------------------- lookup previous record timestamp ---------------------\nlet previousTs = null;\ntry {\n  const lookupItems = $items(\"GS: Lookup row_key\") || [];\n  // ให้เลือกแถวแรกที่เจอ\n  previousTs = lookupItems?.[0]?.json?.ts ?? null; // ใช้คอลัมน์ ts ในชีต\n} catch (e) {\n  previousTs = null;\n}\n\nconst previousTimeText = formatTimeOnly(previousTs);\n\n// --------------------- build message ---------------------\nconst lineText = [\n  \"⚠️ พบรายการซ้ำ ไม่ได้บันทึกเพิ่ม\",\n  \"\",\n  `📅 ${date} ${time} น.`,\n  `${typeIcon} ${typeLabel}`,\n  `🏷 หมวด: ${category}`,\n  `📝 รายการ: ${note}`,\n  amountLine,\n  `💳 ชำระ: ${payment}`,\n  \"\",\n  previousTimeText ? `🕒 บันทึกไปแล้วเมื่อ ${previousTimeText} น.` : null,\n  \"📊 ระบบป้องกันการบันทึกซ้ำทำงานเรียบร้อย\",\n].filter(Boolean).join(\"\\n\");\n\nreturn [\n  {\n    json: {\n      lineText,\n    },\n  },\n];\n"
+      },
+      "id": "80da7375-b859-4e4d-aae9-1f843da57e94",
+      "name": "Code | Build LINE Message-GS-No-Append",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -496,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-GS-No-Append)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        -400
+      ],
+      "id": "b95fa18f-f1b3-4332-a945-a67c394e6113",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        32,
+        -400
+      ],
+      "id": "992fd821-3814-4620-9bf0-1bd9a6a97074",
+      "name": "LineMessageNode-GS-No-Append"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target-GS-No-Append)').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        304,
+        -400
+      ],
+      "id": "e1c5bd06-cf16-4bfb-a879-7f4e23b187e4",
+      "name": "LineMessaging-SendMessage-GS-No-Append",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d468a3ae-a8c0-4273-8ba6-b6a3a7c6a17c",
+              "leftValue": "={{ ['สรุปวันนี้','summary today','today'].includes(($json.text || '').toLowerCase()) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1440,
+        -752
+      ],
+      "id": "6f718842-888a-4b56-90e7-3939dfedd6ca",
+      "name": "IF: Is Summary Today?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json ?? {};\n\nfunction todayBangkok() {\n  const d = new Date();\n  const parts = new Intl.DateTimeFormat(\"en-CA\", {\n    timeZone: \"Asia/Bangkok\",\n    year: \"numeric\",\n    month: \"2-digit\",\n    day: \"2-digit\",\n  }).formatToParts(d);\n  const get = (t) => parts.find(p => p.type === t)?.value ?? \"\";\n  return `${get(\"year\")}-${get(\"month\")}-${get(\"day\")}`;\n}\n\nreturn [{\n  json: {\n    userid: input.userid ?? input.userId ?? input.event?.source?.userId ?? \"\",\n    date: todayBangkok(),\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        -848
+      ],
+      "id": "167af98b-7e33-4557-a851-887d190d1e48",
+      "name": "Code | Build Today Filters"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40",
+          "mode": "list",
+          "cachedResultName": "my_memo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "date",
+              "lookupValue": "={{$json.date}}"
+            },
+            {
+              "lookupColumn": "userId",
+              "lookupValue": "={{$json.userid}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1024,
+        -848
+      ],
+      "id": "04b45cf1-35f5-4c0c-a5a9-dd1af02ca5f7",
+      "name": "GS: Read Today Rows",
+      "credentials": {
+        "googleApi": {
+          "id": "aC3dnZk38DhyTJHi",
+          "name": "Google Sheets account-bbMyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\n\nlet income = 0;\nlet expense = 0;\n\nfor (const r of rows) {\n  const amt = Number(r.amount) || 0;\n  if ((r.type || '').toLowerCase() === 'income') {\n    income += amt;\n  } else {\n    expense += amt;\n  }\n}\n\nreturn [{\n  json: {\n    count: rows.length,\n    income,\n    expense,\n    net: income - expense\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -816,
+        -848
+      ],
+      "id": "3771e6d4-80ed-4de1-9a82-d55339f10481",
+      "name": "Code: Summarize Today"
+    },
+    {
+      "parameters": {
+        "jsCode": "function fmt(n){ return (Number(n)||0).toLocaleString(\"th-TH\"); }\n\nconst lineText = `\n📌 สรุปวันนี้\n\n🧾 จำนวนรายการ: ${$json.count}\n💰 รายรับรวม: ${fmt($json.income)} บาท\n💸 รายจ่ายรวม: ${fmt($json.expense)} บาท\n📊 คงเหลือสุทธิ: ${fmt($json.net)} บาท\n`;\n\nreturn [{ json: { lineText } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        -848
+      ],
+      "id": "834b5fce-b057-4616-984d-e234535d2fc9",
+      "name": "Code: Build LINE Message-SummaryToday"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-Sum-Today",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        -864
+      ],
+      "id": "9b9cba76-fb0b-4431-a218-46f791f92d12",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        -864
+      ],
+      "id": "abb1d5c2-a890-4fbc-a185-44c77ddd8dc1",
+      "name": "LineMessageNode-Sum-Today"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target-Sum-Today').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        208,
+        -864
+      ],
+      "id": "36f7d857-b5cf-4585-a317-c30e5b1505c6",
+      "name": "LineMessaging-SendMessage-Sum-Today",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json ?? {};\n\nfunction todayBangkok() {\n  const d = new Date();\n  const parts = new Intl.DateTimeFormat(\"en-CA\", {\n    timeZone: \"Asia/Bangkok\",\n    year: \"numeric\",\n    month: \"2-digit\",\n    day: \"2-digit\",\n  }).formatToParts(d);\n  const get = (t) => parts.find(p => p.type === t)?.value ?? \"\";\n  return `${get(\"year\")}-${get(\"month\")}-${get(\"day\")}`;\n}\n\nreturn [{\n  json: {\n    userid: input.userid ?? input.userId ?? input.event?.source?.userId ?? \"\",\n    date: todayBangkok(),\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1248,
+        -1040
+      ],
+      "id": "1c4a86c2-08f2-4c41-82ac-ed38c1db8389",
+      "name": "Code | Build Today Filters1"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40",
+          "mode": "list",
+          "cachedResultName": "my_memo",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "transactions",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/17HE3ISKwpgMTeVDdoj5LAs_ZXCbOLIH5xo2sE0B6a40/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "date",
+              "lookupValue": "={{$json.date}}"
+            },
+            {
+              "lookupColumn": "userId",
+              "lookupValue": "={{$json.userid}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1040,
+        -1040
+      ],
+      "id": "f853cb30-566b-4bcc-b5d6-b3ad9fa40074",
+      "name": "GS: Read Today Rows1",
+      "credentials": {
+        "googleApi": {
+          "id": "aC3dnZk38DhyTJHi",
+          "name": "Google Sheets account-bbMyMemo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\n\nlet income = 0;\nlet expense = 0;\n\nfor (const r of rows) {\n  const amt = Number(r.amount) || 0;\n  if ((r.type || '').toLowerCase() === 'income') {\n    income += amt;\n  } else {\n    expense += amt;\n  }\n}\n\nreturn [{\n  json: {\n    count: rows.length,\n    income,\n    expense,\n    net: income - expense\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -832,
+        -1040
+      ],
+      "id": "1cc47fd8-01c1-4d35-96e8-69fa90588473",
+      "name": "Code: Summarize Today1"
+    },
+    {
+      "parameters": {
+        "jsCode": "function fmt(n){ return (Number(n)||0).toLocaleString(\"th-TH\"); }\n\nconst lineText = `\n📌 สรุปวันนี้\n\n🧾 จำนวนรายการ: ${$json.count}\n💰 รายรับรวม: ${fmt($json.income)} บาท\n💸 รายจ่ายรวม: ${fmt($json.expense)} บาท\n📊 คงเหลือสุทธิ: ${fmt($json.net)} บาท\n`;\n\nreturn [{ json: { lineText } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        -1040
+      ],
+      "id": "0620ddc7-c8d0-4798-898a-fb3248834afe",
+      "name": "Code: Build LINE Message-SummaryToday1"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=Uce0221f1e2004f93bcd2e2acc5905502"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target-Sum-Today1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -336,
+        -1056
+      ],
+      "id": "06c73f0a-554c-455b-b657-a6e9d4eaa298",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -1056
+      ],
+      "id": "8bb4bc2e-4fd1-4c5a-b2d8-eeb4105d8a39",
+      "name": "LineMessageNode-Sum-Today1"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target-Sum-Today1').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        192,
+        -1056
+      ],
+      "id": "53201931-8c40-43aa-9c1b-ddf24efba560",
+      "name": "LineMessaging-SendMessage-Sum-Today1",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "i38PdTQMl0XJtmmD",
+          "name": "Line Messaging Auth account-n8n-MyMemo"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook (LINE)": {
+      "main": [
+        [
+          {
+            "node": "Fn: Extract LINE Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Extract LINE Event": {
+      "main": [
+        [
+          {
+            "node": "IF: Has Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Has Event": {
+      "main": [
+        [
+          {
+            "node": "Fn: Parse Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Fn: Parse Message": {
+      "main": [
+        [
+          {
+            "node": "IF: Is Summary Today?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Transaction": {
+      "main": [
+        [
+          {
+            "node": "GS: Lookup row_key",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "GS: Lookup row_key": {
+      "main": [
+        [
+          {
+            "node": "IF: Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Code | Build LINE Message-GS-No-Append",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code: Prepare For Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS: Append Transaction": {
+      "main": [
+        [
+          {
+            "node": "Code | Build LINE Message-GS-Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS: Read Transactions (Last 500)": {
+      "main": [
+        []
+      ]
+    },
+    "IF: Command today": {
+      "main": [
+        [
+          {
+            "node": "Fn: Today Key",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF: Command help",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Today Key": {
+      "main": [
+        [
+          {
+            "node": "GS: Read Transactions (Last 500)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Command help": {
+      "main": [
+        [
+          {
+            "node": "Fn: Build LINE Reply (Help)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fn: Build LINE Reply (Unknown)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Build LINE Reply (Help)": {
+      "main": [
+        [
+          {
+            "node": "Fn: Build LINE Reply (Log)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Build LINE Reply (Unknown)": {
+      "main": [
+        [
+          {
+            "node": "Fn: Build LINE Reply (Log)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS: Read Transactions (Reports)": {
+      "main": [
+        [
+          {
+            "node": "Fn: Build Report (Daily/Weekly/Monthly)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Build Report (Daily/Weekly/Monthly)": {
+      "main": [
+        [
+          {
+            "node": "HTTP: LINE Push (Reports)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "GS: Read Transactions (Reports)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Build LINE Reply (Log)1": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-Help)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-Help)1": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Help1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Help1": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-Help1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prepare For Sheet": {
+      "main": [
+        [
+          {
+            "node": "GS: Append Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-GS-Append)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-GS-Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-GS-Append": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-GS-Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build LINE Message-GS-Append": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-GS-Append)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build LINE Message-GS-No-Append": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-GS-No-Append)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-GS-No-Append)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-GS-No-Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-GS-No-Append": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-GS-No-Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Is Summary Today?": {
+      "main": [
+        [
+          {
+            "node": "Code | Build Today Filters",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF: Is Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build Today Filters": {
+      "main": [
+        [
+          {
+            "node": "GS: Read Today Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS: Read Today Rows": {
+      "main": [
+        [
+          {
+            "node": "Code: Summarize Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Summarize Today": {
+      "main": [
+        [
+          {
+            "node": "Code: Build LINE Message-SummaryToday",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build LINE Message-SummaryToday": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-Sum-Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-Sum-Today": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Sum-Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Sum-Today": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-Sum-Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build Today Filters1": {
+      "main": [
+        [
+          {
+            "node": "GS: Read Today Rows1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS: Read Today Rows1": {
+      "main": [
+        [
+          {
+            "node": "Code: Summarize Today1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Summarize Today1": {
+      "main": [
+        [
+          {
+            "node": "Code: Build LINE Message-SummaryToday1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build LINE Message-SummaryToday1": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target-Sum-Today1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target-Sum-Today1": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode-Sum-Today1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode-Sum-Today1": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage-Sum-Today1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "187cc445-ff7f-431c-af19-5ee8596154f6",
+  "meta": {
+    "instanceId": "6e8bd4e6dcfe2d257f6d9648f4efaf76882daef04e1402d554d9aae9132bba97"
+  },
+  "id": "3f3xFZZDfekDQBwB",
+  "tags": []
+}
