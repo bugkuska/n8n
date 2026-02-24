@@ -1,0 +1,304 @@
+{
+  "name": "06-AI Agent_Gemini_simple_Line_Docs",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai_writer",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1568,
+        400
+      ],
+      "id": "8d85bf6a-d02d-4e7d-8cf8-bf99d770fd1a",
+      "name": "Webhook-AI-Writer",
+      "webhookId": "0ca84b98-9ddd-4695-a8d8-5facf4039b21"
+    },
+    {
+      "parameters": {
+        "functionCode": "// event ตัวแรกจาก LINE Webhook\nconst e = $json.body?.events?.[0];\n\n// กันกรณีไม่มี event\nif (!e) {\n  return [{ json: { error: 'No LINE event found' } }];\n}\n\n// รองรับเฉพาะ message event\nif (e.type !== 'message' || e.message?.type !== 'text') {\n  return [\n    {\n      json: {\n        skip: true,\n        reason: 'Not a text message event',\n        eventType: e.type\n      }\n    }\n  ];\n}\n\n// ดึงข้อความ\nconst text = e.message.text.trim();\n\n// normalize สำหรับ AI / fuzzy\nconst key = text.toLowerCase();\n\n// source id\nconst userId = e.source?.userId || null;\nconst groupId = e.source?.groupId || null;\nconst roomId = e.source?.roomId || null;\n\n// chatId ใช้เป็น target หลัก\nconst chatId = userId || groupId || roomId;\n\n// replyToken (สำคัญ)\nconst replyToken = e.replyToken || null;\n\n// ชนิดแหล่งที่มา\nconst sourceType = e.source?.type || null;\n\n// timestamp\nconst ts = new Date().toISOString();\n\nreturn [\n  {\n    json: {\n      text,\n      key,\n      chatId,\n      replyToken,\n      sourceType,\n      userId,\n      groupId,\n      roomId,\n      ts\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1392,
+        400
+      ],
+      "name": "Code | Extract LINE Event",
+      "id": "103aa4bb-6a65-4691-9c74-95908d2b3e1f",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "message": "={{$json.message}}",
+        "replyToken": "=",
+        "targetRecipient": "={{$node[\"Set (LINE Target)\"].json.toId}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        672
+      ],
+      "id": "aceb1dc8-79aa-461c-ac06-3c66babdb619",
+      "name": "LineMessaging-SendMessage",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "wXnrVemS4WUGnS35",
+          "name": "Line Messaging Auth account-n8n-depa01-ai_writer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentURL": "1IbeXlGFDC-tT8skVAzqiCFvQ2LViA-Y13-QZOWzEwvk",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "={{ $json.block + \"\\n\\n\" }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        464
+      ],
+      "id": "cb95d677-4510-46ea-849a-38bc31bd8ef9",
+      "name": "Google Docs | Append",
+      "credentials": {
+        "googleApi": {
+          "id": "PtP6aVOeFantVH0Y",
+          "name": "Google Docs account-n8n-depa001-ai_writer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b17bdfc3-544b-416a-934d-b85e7c59777d",
+              "leftValue": "={{ $json.skip === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1200,
+        400
+      ],
+      "id": "e99c479d-8a0a-4add-b156-22c1f704105f",
+      "name": "IF | Skip?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Code node: Code | Build LINE Reply (FIX - works in Code node v2)\n\n// 1) LINE event (ดึงจาก node Extract)\nconst ev = $node[\"Code | Extract LINE Event\"].json ?? {};\nconst userText = String(ev.text ?? \"\").trim();\nconst replyToken = ev.replyToken ?? null;\nconst ts = ev.ts ?? new Date().toISOString();\n\n// 2) AI answer (จาก Gemini simplified output)\nconst aiAnswer = String($json.content?.parts?.[0]?.text ?? \"\").trim()\n  || \"ขออภัย ระบบไม่สามารถประมวลผลคำตอบได้\";\n\n// 3) Google Docs block\nconst block =\n`🕒 ${ts}\n📝 คำถาม: ${userText}\n\n🤖 คำตอบ:\n${aiAnswer}\n----------------------------------------`;\n\n// 4) LINE message\nconst lineText =\n`✅ บันทึกลง Google Docs แล้ว\n📝 คำถาม: ${userText}\n\n🤖 คำตอบ:\n${aiAnswer}`;\n\n// ✅ Code node v2: คืนค่าเป็น object เดี่ยว (ไม่ใช้ array)\nreturn {\n  replyToken,\n  userText,\n  aiAnswer,\n  block,\n  lineText,\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -928,
+        464
+      ],
+      "id": "6e3e3d35-1227-466e-8550-72a787059a7c",
+      "name": "Code | Build LINE Reply"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=คุณคือผู้ช่วยค้นข้อมูลและสรุปเป็นภาษาไทยแบบกระชับ ใช้ภาษาสุภาพ\nงานของคุณ:\n1) ตอบคำถามให้ชัดเจน (ถ้าข้อมูลไม่พอ ให้ถามกลับ 1-2 คำถาม)\n2) สรุปเป็นหัวข้อ bullet 5-10 บรรทัด\n3) ปิดท้ายด้วย \"✅ บันทึกลง Google Docs แล้ว\"\n4) ถ้าไม่แน่ใจ ให้บอกว่าไม่แน่ใจ ห้ามเดา\n\nคำถามผู้ใช้:\n{{$json.text}}"
+            },
+            {}
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -1216,
+        656
+      ],
+      "id": "20b1b195-6a15-4da4-a656-68b76e6f1b04",
+      "name": "Message a model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "UN1k5CmPibFsJDfw",
+          "name": "Google Gemini(PaLM-n8n-depa-ai_writer01"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "={{ $node[\"Code | Extract LINE Event\"].json.chatId }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.lineText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        672
+      ],
+      "id": "f6a64877-21dd-4d95-87da-672bfdbb4093",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{$json.message}}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        672
+      ],
+      "id": "982fdec6-c293-4afc-b1e4-0f02ec2348c1",
+      "name": "LineMessageNode"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook-AI-Writer": {
+      "main": [
+        [
+          {
+            "node": "Code | Extract LINE Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Extract LINE Event": {
+      "main": [
+        [
+          {
+            "node": "IF | Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF | Skip?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build LINE Reply": {
+      "main": [
+        [
+          {
+            "node": "Google Docs | Append",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set (LINE Target)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Code | Build LINE Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "ce9778c1-dc3b-4623-af5a-9ac4932f134a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6e8bd4e6dcfe2d257f6d9648f4efaf76882daef04e1402d554d9aae9132bba97"
+  },
+  "id": "6XuCJZLtGgCo6DnBhS4yS",
+  "tags": []
+}
